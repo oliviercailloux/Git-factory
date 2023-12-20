@@ -30,19 +30,19 @@ public class GitCloner {
 	@SuppressWarnings("unused")
 	private static final Logger LOGGER = LoggerFactory.getLogger(GitCloner.class);
 	@SuppressWarnings("unused")
-	private static final Unchecker<GitAPIException, IllegalStateException> UNCHECKER = Unchecker
-			.wrappingWith(IllegalStateException::new);
+	private static final Unchecker<GitAPIException, IllegalStateException> UNCHECKER =
+			Unchecker.wrappingWith(IllegalStateException::new);
 
 	public static GitCloner create() {
 		return new GitCloner();
 	}
 
-	private GitCloner() {
-	}
+	private GitCloner() {}
 
 	public void clone(GitUri gitUri, Repository repo) {
 		try (Git git = Git.wrap(repo)) {
-			git.fetch().setRemote(gitUri.asString()).setRefSpecs(new RefSpec("+refs/heads/*:refs/heads/*")).call();
+			git.fetch().setRemote(gitUri.asString())
+					.setRefSpecs(new RefSpec("+refs/heads/*:refs/heads/*")).call();
 		} catch (GitAPIException e) {
 			throw new IllegalStateException(e);
 		}
@@ -68,23 +68,22 @@ public class GitCloner {
 	}
 
 	/**
-	 * If the given uri contains an empty repository, this returns an empty
-	 * repository: repository.getObjectDatabase().exists() is true;
-	 * repository.getRefDatabase().hasRefs() is false.
+	 * If the given uri contains an empty repository, this returns an empty repository:
+	 * repository.getObjectDatabase().exists() is true; repository.getRefDatabase().hasRefs() is
+	 * false.
 	 *
-	 * TODO I should probably not attempt to create a bare repository where a
-	 * non-bare repository currently lives!
+	 * TODO I should probably not attempt to create a bare repository where a non-bare repository
+	 * currently lives!
 	 *
-	 * @param repositoryDirectory GIT_DIR (replacing .git dir) if bare (see
-	 *                            {@link FileRepository}), otherwise, work tree dir,
-	 *                            in which a .git dir will be created (or exists).
-	 * @param allowBare           {@code true} to clone bare if not exists (if
-	 *                            exists, this method will not check whether it is
-	 *                            bare)
+	 * @param repositoryDirectory GIT_DIR (replacing .git dir) if bare (see {@link FileRepository}),
+	 *        otherwise, work tree dir, in which a .git dir will be created (or exists).
+	 * @param allowBare {@code true} to clone bare if not exists (if exists, this method will not
+	 *        check whether it is bare)
 	 * @return
 	 * @throws GitAPIException
 	 */
-	private FileRepository download(GitUri uri, Path repositoryDirectory, boolean allowBare) throws GitAPIException {
+	private FileRepository download(GitUri uri, Path repositoryDirectory, boolean allowBare)
+			throws GitAPIException {
 		final FileRepository repository;
 		final boolean exists = Files.exists(repositoryDirectory);
 		LOGGER.info("Downloading to {}, exists? {}.", repositoryDirectory, exists);
@@ -95,37 +94,37 @@ public class GitCloner {
 			final File dest = repositoryDirectory.toFile();
 			cloneCmd.setDirectory(dest);
 			LOGGER.info("Cloning {} to {}.", uri, dest);
-//			try {
-//				cloneCmd.call().close();
-//			} catch (GitAPIException e) {
-//				throw new IOException(e);
-//			}
-//			try (Git git = Git.open(repositoryDirectory.toFile())) {
+			// try {
+			// cloneCmd.call().close();
+			// } catch (GitAPIException e) {
+			// throw new IOException(e);
+			// }
+			// try (Git git = Git.open(repositoryDirectory.toFile())) {
 			Git git = cloneCmd.call();
 			repository = (FileRepository) git.getRepository();
 		} else {
 			try {
-				repository = (FileRepository) new FileRepositoryBuilder().setWorkTree(repositoryDirectory.toFile())
-						.build();
+				repository = (FileRepository) new FileRepositoryBuilder()
+						.setWorkTree(repositoryDirectory.toFile()).build();
 			} catch (IOException e) {
 				throw new IllegalStateException(e);
 			}
 			try (Git git = Git.wrap(repository)) {
 				final List<RemoteConfig> remoteList = git.remoteList().call();
-				final Optional<RemoteConfig> origin = remoteList.stream().filter((r) -> r.getName().equals("origin"))
-						.collect(MoreCollectors.toOptional());
+				final Optional<RemoteConfig> origin = remoteList.stream()
+						.filter((r) -> r.getName().equals("origin")).collect(MoreCollectors.toOptional());
 				final Status status = git.status().call();
 				/*
 				 * Creates a problem probably related to https://stackoverflow.com/a/4162672
 				 * (oliviercailloux-org/eclipse-LucasLePort).
 				 *
-				 * Also, if a non-bare repository is there and the caller tries to download bare
-				 * by handing the .git folder, this reports an unclean status because it thinks
-				 * that I want to version the files in the .git folder (objects/pack/*, refs/*,
-				 * …).
+				 * Also, if a non-bare repository is there and the caller tries to download bare by handing
+				 * the .git folder, this reports an unclean status because it thinks that I want to version
+				 * the files in the .git folder (objects/pack/*, refs/*, …).
 				 */
 				if (!git.getRepository().isBare() && !status.isClean()) {
-					throw new IllegalStateException("Can’t update " + uri + ": not clean (" + toString(status) + ").");
+					throw new IllegalStateException(
+							"Can’t update " + uri + ": not clean (" + toString(status) + ").");
 				}
 				final String fullBranch = git.getRepository().getFullBranch();
 				LOGGER.debug("HEAD: {}.", fullBranch);
@@ -167,11 +166,12 @@ public class GitCloner {
 	}
 
 	private String toString(Status status) {
-		return MoreObjects.toStringHelper(status).add("Added", status.getAdded()).add("Changed", status.getChanged())
-				.add("Conflicting", status.getConflicting()).add("Ignored not in index", status.getIgnoredNotInIndex())
+		return MoreObjects.toStringHelper(status).add("Added", status.getAdded())
+				.add("Changed", status.getChanged()).add("Conflicting", status.getConflicting())
+				.add("Ignored not in index", status.getIgnoredNotInIndex())
 				.add("Missing", status.getMissing()).add("Modified", status.getModified())
-				.add("Removed", status.getRemoved()).add("Uncommitted changes", status.getUncommittedChanges())
+				.add("Removed", status.getRemoved())
+				.add("Uncommitted changes", status.getUncommittedChanges())
 				.add("Untracked", status.getUntracked()).toString();
 	}
-
 }

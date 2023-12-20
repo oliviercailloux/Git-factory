@@ -57,14 +57,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Graphs used here use the convention that the successor relation represents
- * the child-of relation: the successors of a node are its children; a pair (a,
- * b) in the graph represents a parent commit a and its child commit b. (See
- * also gitjfs.)
+ * Graphs used here use the convention that the successor relation represents the child-of relation:
+ * the successors of a node are its children; a pair (a, b) in the graph represents a parent commit
+ * a and its child commit b. (See also gitjfs.)
  * <p>
- * TODO should be two, the simplest one not dealing with constant dags or
- * closing dags, and which also returns a mapping path <=> commits (is this
- * useful?); and a wrapper one that admits constant dags.
+ * TODO should be two, the simplest one not dealing with constant dags or closing dags, and which
+ * also returns a mapping path <=> commits (is this useful?); and a wrapper one that admits constant
+ * dags.
  */
 public class FactoGit {
 	@SuppressWarnings("unused")
@@ -75,8 +74,8 @@ public class FactoGit {
 		if (lineGraph.nodes().isEmpty()) {
 			return ImmutableSet.of();
 		}
-		final ImmutableSet<Path> starters = lineGraph.nodes().stream().filter(n -> lineGraph.predecessors(n).isEmpty())
-				.collect(ImmutableSet.toImmutableSet());
+		final ImmutableSet<Path> starters = lineGraph.nodes().stream()
+				.filter(n -> lineGraph.predecessors(n).isEmpty()).collect(ImmutableSet.toImmutableSet());
 		if (starters.isEmpty()) {
 			verify(Graphs.hasCycle(lineGraph));
 			throw new IllegalArgumentException("The given (supposedly 'line') graph has a cycle.");
@@ -105,8 +104,8 @@ public class FactoGit {
 		final ImmutableSet<Path> line = builder.build();
 		if (line.size() != lineGraph.nodes().size()) {
 			/**
-			 * Only one starter but we did not exhaust the graph by following it; so some
-			 * other component of it cycles.
+			 * Only one starter but we did not exhaust the graph by following it; so some other component
+			 * of it cycles.
 			 */
 			verify(Graphs.hasCycle(lineGraph));
 			throw new IllegalArgumentException("The given (supposedly 'line') graph has a cycle.");
@@ -117,7 +116,8 @@ public class FactoGit {
 	private static ImmutableSet<Path> toLine(Graph<Path> lineGraph) {
 		checkArgument(lineGraph.nodes().stream().filter(n -> lineGraph.inDegree(n) == 0).count() == 1l);
 		checkArgument(lineGraph.nodes().stream().allMatch(n -> lineGraph.inDegree(n) <= 1));
-		checkArgument(lineGraph.nodes().stream().filter(n -> lineGraph.outDegree(n) == 0).count() == 1l);
+		checkArgument(
+				lineGraph.nodes().stream().filter(n -> lineGraph.outDegree(n) == 0).count() == 1l);
 		checkArgument(lineGraph.nodes().stream().allMatch(n -> lineGraph.outDegree(n) <= 1));
 		verify(!Graphs.hasCycle(lineGraph));
 		return GraphUtils.topologicallySortedNodes(lineGraph);
@@ -134,14 +134,14 @@ public class FactoGit {
 
 		public static CloseableDagOfPaths dag(ConstantDag sort) throws IOException {
 			switch (sort) {
-			case BASIC:
-				return dagBasic();
-			case SUB:
-				return dagSub();
-			case LINKED:
-				return dagLinked();
-			default:
-				throw new IllegalStateException();
+				case BASIC:
+					return dagBasic();
+				case SUB:
+					return dagSub();
+				case LINKED:
+					return dagLinked();
+				default:
+					throw new IllegalStateException();
 			}
 		}
 
@@ -164,7 +164,8 @@ public class FactoGit {
 			final Path workDir = fs.getPath("");
 			Files.writeString(workDir.resolve("file1.txt"), "Hello, world");
 			Files.writeString(workDir.resolve("file2.txt"), "Hello again");
-			final ImmutableGraph<Path> graph = GraphBuilder.directed().<Path>immutable().addNode(workDir).build();
+			final ImmutableGraph<Path> graph =
+					GraphBuilder.directed().<Path>immutable().addNode(workDir).build();
 			return new CloseableDagOfPaths(fs, graph);
 		}
 
@@ -249,7 +250,8 @@ public class FactoGit {
 				Files.createDirectory(subDirectory);
 				Files.createSymbolicLink(subDirectory.resolve("link"), fs.getPath("../link.txt"));
 				Files.createSymbolicLink(subDirectory.resolve("linkToParent"), fs.getPath(".."));
-				Files.createSymbolicLink(subDirectory.resolve("cyclingLink"), fs.getPath("../dir/cyclingLink"));
+				Files.createSymbolicLink(subDirectory.resolve("cyclingLink"),
+						fs.getPath("../dir/cyclingLink"));
 
 				builder.add(workDir);
 			}
@@ -268,7 +270,8 @@ public class FactoGit {
 				Files.createDirectory(subDirectory);
 				Files.createSymbolicLink(subDirectory.resolve("link"), fs.getPath("../link.txt"));
 				Files.createSymbolicLink(subDirectory.resolve("linkToParent"), fs.getPath(".."));
-				Files.createSymbolicLink(subDirectory.resolve("cyclingLink"), fs.getPath("../dir/cyclingLink"));
+				Files.createSymbolicLink(subDirectory.resolve("cyclingLink"),
+						fs.getPath("../dir/cyclingLink"));
 				Files.delete(file1);
 
 				builder.add(workDir);
@@ -301,21 +304,22 @@ public class FactoGit {
 		public void close() throws IOException {
 			fs.ifPresent(f -> f.close());
 		}
-
 	}
 
 	public static FactoGit empty() {
 		return new FactoGit();
 	}
 
-	private static Function<Path, IdStamp> identsFunction(ImmutableGraph<Path> ourDag, IdStamp identStartThenIncrease) {
+	private static Function<Path, IdStamp> identsFunction(ImmutableGraph<Path> ourDag,
+			IdStamp identStartThenIncrease) {
 		final Function<Path, IdStamp> ourIdent;
 		final ImmutableSet<Path> line = toLine(ourDag);
 		final ImmutableMap.Builder<Path, IdStamp> builder = ImmutableMap.builder();
 		IdStamp current = identStartThenIncrease;
 		for (Path path : line) {
 			builder.put(path, current);
-			current = new IdStamp(current.name(), current.email(), current.timestamp().plus(1, ChronoUnit.HOURS));
+			current = new IdStamp(current.name(), current.email(),
+					current.timestamp().plus(1, ChronoUnit.HOURS));
 		}
 		final ImmutableMap<Path, IdStamp> idents = builder.build();
 		ourIdent = Functions.forMap(idents);
@@ -335,12 +339,12 @@ public class FactoGit {
 	}
 
 	private static PersonIdent personIdent(IdStamp ident) {
-		return new PersonIdent(ident.name(), ident.email(), ident.timestamp().toInstant(), ident.timestamp().getZone());
+		return new PersonIdent(ident.name(), ident.email(), ident.timestamp().toInstant(),
+				ident.timestamp().getZone());
 	}
 
 	/**
-	 * Does not return <code>null</code>. Exactly one of ident and
-	 * identStartThenIncrease is null.
+	 * Does not return <code>null</code>. Exactly one of ident and identStartThenIncrease is null.
 	 */
 	private Function<Path, IdStamp> ident;
 	/**
@@ -431,21 +435,22 @@ public class FactoGit {
 			verify(refs.size() == 0, refs.toString());
 		}
 		{
-			final ImmutableList<Ref> refs = ImmutableList.copyOf(repository.getRefDatabase().getAdditionalRefs());
+			final ImmutableList<Ref> refs =
+					ImmutableList.copyOf(repository.getRefDatabase().getAdditionalRefs());
 			verify(refs.size() == 0, refs.toString());
 		}
 		final ObjectDatabase objectDatabase = repository.getObjectDatabase();
 
-		try (CloseableDagOfPaths clDag = TOptional.ofNullable(constantDag).map(c -> CloseableDagOfPaths.dag(c))
-				.orElseGet(() -> CloseableDagOfPaths.given(dag))) {
+		try (CloseableDagOfPaths clDag = TOptional.ofNullable(constantDag)
+				.map(c -> CloseableDagOfPaths.dag(c)).orElseGet(() -> CloseableDagOfPaths.given(dag))) {
 			final ImmutableGraph<Path> ourDag = clDag.dag();
 
 			final Function<Path, IdStamp> ourIdent = Optional.ofNullable(ident)
 					.orElseGet(() -> identsFunction(ourDag, identStartThenIncrease));
 			final Function<Path, String> messagesFunction = messagesFunction(ourDag);
 
-			final ImmutableSet<Path> starters = ourDag.nodes().stream().filter(p -> ourDag.predecessors(p).size() == 0)
-					.collect(ImmutableSet.toImmutableSet());
+			final ImmutableSet<Path> starters = ourDag.nodes().stream()
+					.filter(p -> ourDag.predecessors(p).size() == 0).collect(ImmutableSet.toImmutableSet());
 			LOGGER.debug("Visiting from {}.", starters);
 			final ImmutableSet<Path> sources = GraphUtils.topologicallySortedNodes(ourDag);
 
@@ -454,10 +459,10 @@ public class FactoGit {
 				for (Path source : sources) {
 					LOGGER.debug("Visiting {}.", source);
 					final Set<Path> parentPaths = ourDag.predecessors(source);
-					final ImmutableList<ObjectId> parents = parentPaths.stream().map(p -> commitsBuilder.get(p))
-							.collect(ImmutableSet.toImmutableSet()).asList();
-					final ObjectId oId = insertCommit(inserter, personIdent(ourIdent.apply(source)), source, parents,
-							messagesFunction.apply(source));
+					final ImmutableList<ObjectId> parents = parentPaths.stream()
+							.map(p -> commitsBuilder.get(p)).collect(ImmutableSet.toImmutableSet()).asList();
+					final ObjectId oId = insertCommit(inserter, personIdent(ourIdent.apply(source)), source,
+							parents, messagesFunction.apply(source));
 					commitsBuilder.put(source, oId);
 				}
 			}
@@ -486,7 +491,8 @@ public class FactoGit {
 				final ObjectId targetId = commits.get(targetPath);
 				final Path relativeLinkName = links.relativize(link);
 				LOGGER.debug("Linking {} to {}.", relativeLinkName, targetPath);
-				final RefUpdate update = repository.getRefDatabase().newUpdate(relativeLinkName.toString(), false);
+				final RefUpdate update =
+						repository.getRefDatabase().newUpdate(relativeLinkName.toString(), false);
 				update.setNewObjectId(targetId);
 				update.setExpectedOldObjectId(ObjectId.zeroId());
 				final Result result = update.update();
@@ -515,7 +521,8 @@ public class FactoGit {
 		return f.build();
 	}
 
-	public static InMemoryRepository createRepository(IdStamp ident, String path, String content) throws IOException {
+	public static InMemoryRepository createRepository(IdStamp ident, String path, String content)
+			throws IOException {
 		try (FileSystem jimFs = Jimfs.newFileSystem(Configuration.unix())) {
 			final Path workDir = jimFs.getPath("");
 
@@ -530,14 +537,14 @@ public class FactoGit {
 		}
 	}
 
-	private static ObjectId insertCommit(ObjectInserter inserter, PersonIdent personIdent, Path directory,
-			List<ObjectId> parents, String commitMessage) throws IOException {
+	private static ObjectId insertCommit(ObjectInserter inserter, PersonIdent personIdent,
+			Path directory, List<ObjectId> parents, String commitMessage) throws IOException {
 		final ObjectId treeId = insertTree(inserter, directory);
 		return insertCommit(inserter, personIdent, treeId, parents, commitMessage);
 	}
 
-	private static ObjectId insertCommit(ObjectInserter inserter, PersonIdent personIdent, ObjectId treeId,
-			List<ObjectId> parents, String commitMessage) throws IOException {
+	private static ObjectId insertCommit(ObjectInserter inserter, PersonIdent personIdent,
+			ObjectId treeId, List<ObjectId> parents, String commitMessage) throws IOException {
 		final CommitBuilder commitBuilder = new CommitBuilder();
 		commitBuilder.setMessage(commitMessage);
 		commitBuilder.setAuthor(personIdent);
@@ -561,8 +568,7 @@ public class FactoGit {
 		checkArgument(Files.isDirectory(directory));
 
 		/*
-		 * TODO TreeFormatter says that the entries must come in the <i>right</i> order;
-		 * what’s that?
+		 * TODO TreeFormatter says that the entries must come in the <i>right</i> order; what’s that?
 		 */
 		final TreeFormatter treeFormatter = new TreeFormatter();
 
@@ -575,8 +581,8 @@ public class FactoGit {
 				if (Files.isRegularFile(entry, LinkOption.NOFOLLOW_LINKS)) {
 					LOGGER.debug("Creating regular: {}.", entry);
 					final String fileContent = Files.readString(entry);
-					final ObjectId fileOid = inserter.insert(Constants.OBJ_BLOB,
-							fileContent.getBytes(StandardCharsets.UTF_8));
+					final ObjectId fileOid =
+							inserter.insert(Constants.OBJ_BLOB, fileContent.getBytes(StandardCharsets.UTF_8));
 					treeFormatter.append(entryName, FileMode.REGULAR_FILE, fileOid);
 				} else if (Files.isDirectory(entry, LinkOption.NOFOLLOW_LINKS)) {
 					final ObjectId tree = insertTree(inserter, entry);
@@ -587,7 +593,8 @@ public class FactoGit {
 					{
 						final Path dest = Files.readSymbolicLink(entry);
 						final String separator = dest.getFileSystem().getSeparator();
-						if (dest.getFileSystem().provider().getScheme().equals("file") && separator.equals("\\")) {
+						if (dest.getFileSystem().provider().getScheme().equals("file")
+								&& separator.equals("\\")) {
 							destSlashSeparated = dest.toString().replace("\\", "/");
 						} else {
 							checkArgument(separator.equals("/"));
