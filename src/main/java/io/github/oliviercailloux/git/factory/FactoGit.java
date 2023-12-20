@@ -62,7 +62,7 @@ import org.slf4j.LoggerFactory;
  * a and its child commit b. (See also gitjfs.)
  * <p>
  * TODO should be two, the simplest one not dealing with constant dags or closing dags, and which
- * also returns a mapping path <=> commits (is this useful?); and a wrapper one that admits constant
+ * also returns a mapping path ⇔ commits (is this useful?); and a wrapper one that admits constant
  * dags.
  */
 public class FactoGit {
