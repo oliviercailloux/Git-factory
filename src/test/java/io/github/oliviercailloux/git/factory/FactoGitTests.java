@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 
 public class FactoGitTests {
 	@Test
-	void testCreateRepo() throws Exception {
+	void testCreateRepoSub() throws Exception {
 		final FactoGit f = FactoGit.empty();
 		f.setSubDag();
 		try (Repository repo = f.build()) {
