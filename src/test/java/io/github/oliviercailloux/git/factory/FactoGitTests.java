@@ -9,15 +9,15 @@ import org.eclipse.jgit.revwalk.RevCommit;
 import org.junit.jupiter.api.Test;
 
 public class FactoGitTests {
-	@Test
-	void testCreateRepoSub() throws Exception {
-		final FactoGit f = FactoGit.empty();
-		f.setSubDag();
-		try (Repository repo = f.build()) {
-			try (Git git = Git.wrap(repo)) {
-				final ImmutableList<RevCommit> read = ImmutableList.copyOf(git.log().call());
-				assertEquals(3, read.size());
-			}
-		}
-	}
+  @Test
+  void testCreateRepoSub() throws Exception {
+    final FactoGit f = FactoGit.empty();
+    f.setSubDag();
+    try (Repository repo = f.build()) {
+      try (Git git = Git.wrap(repo)) {
+        final ImmutableList<RevCommit> read = ImmutableList.copyOf(git.log().call());
+        assertEquals(3, read.size());
+      }
+    }
+  }
 }
