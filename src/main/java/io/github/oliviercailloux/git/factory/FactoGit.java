@@ -82,7 +82,8 @@ public class FactoGit {
     }
     if (starters.size() >= 2) {
       throw new IllegalArgumentException(
-          "The given (supposedly 'line') graph has more than one starting point (node with no parent).");
+          "The given (supposedly 'line') graph has more than one starting point"
+              + " (node with no parent).");
     }
     final Path starter = Iterables.getOnlyElement(starters);
 
@@ -103,7 +104,7 @@ public class FactoGit {
 
     final ImmutableSet<Path> line = builder.build();
     if (line.size() != lineGraph.nodes().size()) {
-      /**
+      /*
        * Only one starter but we did not exhaust the graph by following it; so some other component
        * of it cycles.
        */
@@ -114,10 +115,10 @@ public class FactoGit {
   }
 
   private static ImmutableSet<Path> toLine(Graph<Path> lineGraph) {
-    checkArgument(lineGraph.nodes().stream().filter(n -> lineGraph.inDegree(n) == 0).count() == 1l);
+    checkArgument(lineGraph.nodes().stream().filter(n -> lineGraph.inDegree(n) == 0).count() == 1L);
     checkArgument(lineGraph.nodes().stream().allMatch(n -> lineGraph.inDegree(n) <= 1));
     checkArgument(
-        lineGraph.nodes().stream().filter(n -> lineGraph.outDegree(n) == 0).count() == 1l);
+        lineGraph.nodes().stream().filter(n -> lineGraph.outDegree(n) == 0).count() == 1L);
     checkArgument(lineGraph.nodes().stream().allMatch(n -> lineGraph.outDegree(n) <= 1));
     verify(!Graphs.hasCycle(lineGraph));
     return GraphUtils.topologicallySortedNodes(lineGraph);
@@ -150,16 +151,6 @@ public class FactoGit {
       return dagBasic(jimFs);
     }
 
-    public static CloseableDagOfPaths dagSub() throws IOException {
-      final FileSystem jimFs = Jimfs.newFileSystem(Configuration.unix());
-      return dagSub(jimFs);
-    }
-
-    public static CloseableDagOfPaths dagLinked() throws IOException {
-      final FileSystem jimFs = Jimfs.newFileSystem(Configuration.unix());
-      return dagLinked(jimFs);
-    }
-
     private static CloseableDagOfPaths dagBasic(FileSystem fs) throws IOException {
       final Path workDir = fs.getPath("");
       Files.writeString(workDir.resolve("file1.txt"), "Hello, world");
@@ -167,6 +158,11 @@ public class FactoGit {
       final ImmutableGraph<Path> graph =
           GraphBuilder.directed().<Path>immutable().addNode(workDir).build();
       return new CloseableDagOfPaths(fs, graph);
+    }
+
+    public static CloseableDagOfPaths dagSub() throws IOException {
+      final FileSystem jimFs = Jimfs.newFileSystem(Configuration.unix());
+      return dagSub(jimFs);
     }
 
     private static CloseableDagOfPaths dagSub(FileSystem fs) throws IOException {
@@ -203,6 +199,11 @@ public class FactoGit {
 
       final ImmutableGraph<Path> graph = ImmutableGraph.copyOf(GraphUtils.asGraph(builder.build()));
       return new CloseableDagOfPaths(fs, graph);
+    }
+
+    public static CloseableDagOfPaths dagLinked() throws IOException {
+      final FileSystem jimFs = Jimfs.newFileSystem(Configuration.unix());
+      return dagLinked(jimFs);
     }
 
     private static CloseableDagOfPaths dagLinked(FileSystem fs) throws IOException {
@@ -602,8 +603,8 @@ public class FactoGit {
             }
           }
           final byte[] destAsBytes = destSlashSeparated.getBytes(StandardCharsets.UTF_8);
-          final ObjectId fileOId = inserter.insert(Constants.OBJ_BLOB, destAsBytes);
-          treeFormatter.append(entryName, FileMode.SYMLINK, fileOId);
+          final ObjectId fileObjId = inserter.insert(Constants.OBJ_BLOB, destAsBytes);
+          treeFormatter.append(entryName, FileMode.SYMLINK, fileObjId);
         } else {
           throw new IllegalArgumentException("Unknown entry: " + entry);
         }

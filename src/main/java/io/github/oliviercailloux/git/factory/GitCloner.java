@@ -51,7 +51,7 @@ public class GitCloner {
   public FileRepository download(GitUri uri, Path workTree) {
     for (int i = 0; i < 1; ++i) {
       try {
-        return download(uri, workTree, false);
+        return downloadGeneral(uri, workTree, false);
       } catch (GitAPIException e) {
         LOGGER.error("Oops, retrying temporarily.", e);
       }
@@ -61,7 +61,7 @@ public class GitCloner {
 
   public FileRepository downloadBare(GitUri uri, Path gitDir) {
     try {
-      return download(uri, gitDir, true);
+      return downloadGeneral(uri, gitDir, true);
     } catch (GitAPIException e) {
       throw new IllegalStateException(e);
     }
@@ -71,7 +71,7 @@ public class GitCloner {
    * If the given uri contains an empty repository, this returns an empty repository:
    * repository.getObjectDatabase().exists() is true; repository.getRefDatabase().hasRefs() is
    * false.
-   *
+   *<p>
    * TODO I should probably not attempt to create a bare repository where a non-bare repository
    * currently lives!
    *
@@ -79,10 +79,10 @@ public class GitCloner {
    *        otherwise, work tree dir, in which a .git dir will be created (or exists).
    * @param allowBare {@code true} to clone bare if not exists (if exists, this method will not
    *        check whether it is bare)
-   * @return
-   * @throws GitAPIException
+   * @return the repository
+   * @throws GitAPIException if some git command fails
    */
-  private FileRepository download(GitUri uri, Path repositoryDirectory, boolean allowBare)
+  private FileRepository downloadGeneral(GitUri uri, Path repositoryDirectory, boolean allowBare)
       throws GitAPIException {
     final FileRepository repository;
     final boolean exists = Files.exists(repositoryDirectory);
@@ -140,7 +140,7 @@ public class GitCloner {
           } else {
             final Ref r = fetchResult.getAdvertisedRef(fullBranch);
             if (r == null) {
-              /** Happens with a repository on GitHub that has never been pushed to. */
+              /* Happens with a repository on GitHub that has never been pushed to. */
               /*
                * TODO happens if I manually check out an older commit from the locally clone
                * repository.
