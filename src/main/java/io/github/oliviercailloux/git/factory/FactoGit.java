@@ -297,6 +297,7 @@ public class FactoGit {
       verify(!Graphs.hasCycle(dag));
     }
 
+    @SuppressWarnings("OverloadMethodsDeclarationOrder")
     public ImmutableGraph<Path> dag() {
       return dag;
     }
