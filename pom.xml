@@ -12,21 +12,6 @@
   <artifactId>factory</artifactId>
   <version>0.0.2-SNAPSHOT</version>
 
-  <profiles>
-    <profile>
-      <id>release</id>
-      <build>
-        <plugins>
-          <plugin>
-            <artifactId>maven-javadoc-plugin</artifactId>
-            <configuration>
-              <failOnWarnings>false</failOnWarnings>
-            </configuration>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
-  </profiles>
   <dependencies>
     <dependency>
       <groupId>io.github.oliviercailloux.git</groupId>
