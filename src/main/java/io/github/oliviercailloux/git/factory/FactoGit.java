@@ -21,7 +21,7 @@ import com.google.common.graph.ImmutableGraph;
 import com.google.common.jimfs.Configuration;
 import com.google.common.jimfs.Jimfs;
 import io.github.oliviercailloux.git.common.IdStamp;
-import io.github.oliviercailloux.jaris.collections.GraphUtils;
+import io.github.oliviercailloux.jaris.graphs.GraphUtils;
 import io.github.oliviercailloux.jaris.throwing.TOptional;
 import java.io.Closeable;
 import java.io.IOException;

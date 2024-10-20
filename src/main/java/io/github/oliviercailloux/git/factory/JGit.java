@@ -16,7 +16,7 @@ import com.google.common.graph.Graph;
 import com.google.common.graph.Graphs;
 import com.google.common.jimfs.Configuration;
 import com.google.common.jimfs.Jimfs;
-import io.github.oliviercailloux.jaris.collections.GraphUtils;
+import io.github.oliviercailloux.jaris.graphs.GraphUtils;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
