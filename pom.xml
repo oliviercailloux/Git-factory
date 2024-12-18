@@ -8,7 +8,7 @@
   </parent>
   <name>Git factory</name>
   <artifactId>git-factory</artifactId>
-  <version>0.0.3</version>
+  <version>0.0.4-SNAPSHOT</version>
 	<url>https://github.com/oliviercailloux/Git-factory</url>
 
   <dependencies>
