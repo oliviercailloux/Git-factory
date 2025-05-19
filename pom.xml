@@ -7,7 +7,7 @@
     <version>0.0.25</version>
   </parent>
   <artifactId>git-factory</artifactId>
-  <version>0.0.4</version>
+  <version>0.0.5-SNAPSHOT</version>
   <name>Git factory</name>
   <properties>
     <github-repository>Git-factory</github-repository>
