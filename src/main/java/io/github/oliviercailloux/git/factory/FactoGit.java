@@ -345,6 +345,8 @@ public class FactoGit {
         ident.timestamp().getZone());
   }
 
+  private String name;
+
   /**
    * Does not return <code>null</code>. Exactly one of ident and identStartThenIncrease is null.
    */
@@ -364,6 +366,7 @@ public class FactoGit {
   private Path links;
 
   private FactoGit() {
+    name = "";
     ident = p -> new IdStamp("", "", Instant.now().atZone(ZoneOffset.UTC));
     dag = null;
     constantDag = null;
@@ -425,12 +428,17 @@ public class FactoGit {
     this.links = links;
   }
 
+  public void setName(String name) {
+    this.name = checkNotNull(name);
+  }
+
   public InMemoryRepository build() throws IOException {
     verify(dag == null || constantDag == null);
     verify(Objects.isNull(ident) != Objects.isNull(identStartThenIncrease));
     checkState(dag != null || constantDag != null);
 
-    final InMemoryRepository repository = new InMemoryRepository(new DfsRepositoryDescription());
+    final InMemoryRepository repository =
+        new InMemoryRepository(new DfsRepositoryDescription(name));
     repository.create(true);
     {
       final ImmutableList<Ref> refs = ImmutableList.copyOf(repository.getRefDatabase().getRefs());
