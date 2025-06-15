@@ -53,6 +53,7 @@ import org.eclipse.jgit.lib.RefUpdate;
 import org.eclipse.jgit.lib.RefUpdate.Result;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.lib.TreeFormatter;
+import org.eclipse.jgit.util.SystemReader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -312,6 +313,10 @@ public class FactoGit {
     return new FactoGit();
   }
 
+  public static void clearConfig() {
+    SystemReader.setInstance(new EmptyConfigSystemReader());
+  }
+  
   private static Function<Path, IdStamp> identsFunction(ImmutableGraph<Path> ourDag,
       IdStamp identStartThenIncrease) {
     final Function<Path, IdStamp> ourIdent;
