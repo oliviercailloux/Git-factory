@@ -61,8 +61,9 @@ public class GitConfigTests {
     try (Git git = Git.init().setDirectory(tempDir.toFile()).call()) {
       StoredConfig config = git.getRepository().getConfig();
       assertEquals(ImmutableSet.of("core"), config.getSections());
-      assertTrue(config.getSubsections("core").isEmpty(), "Expected core section to have no subsections");
-      // assertEquals(ImmutableSet.of(), config.getNames("core"));
+      assertTrue(config.getSubsections("core").isEmpty(),
+          "Expected core section to have no subsections");
+      // assertEquals(ImmutableSet.of(…), config.getNames("core"));
       assertEquals(null, config.getString("user", null, "name"));
       assertEquals(null, config.getString("user", null, "email"));
       assertEquals(null, config.getString("core", null, "editor"));
