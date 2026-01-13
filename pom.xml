@@ -4,7 +4,7 @@
   <parent>
     <groupId>io.github.oliviercailloux</groupId>
     <artifactId>pom</artifactId>
-    <version>0.0.25</version>
+    <version>0.0.29</version>
   </parent>
   <artifactId>git-factory</artifactId>
   <version>0.0.7-SNAPSHOT</version>
@@ -17,12 +17,12 @@
     <dependency>
       <groupId>io.github.oliviercailloux</groupId>
       <artifactId>jaris</artifactId>
-      <version>0.0.39</version>
+      <version>0.0.42</version>
     </dependency>
     <dependency>
-      <groupId>io.github.oliviercailloux</groupId>
+      <groupId>io.github.oliviercailloux.git</groupId>
       <artifactId>git-common</artifactId>
-      <version>0.0.4</version>
+      <version>0.0.5</version>
     </dependency>
     <dependency>
       <groupId>com.google.jimfs</groupId>
