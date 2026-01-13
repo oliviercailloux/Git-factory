@@ -8,7 +8,7 @@
   </parent>
   <groupId>io.github.oliviercailloux.git</groupId>
   <artifactId>git-factory</artifactId>
-  <version>0.0.7</version>
+  <version>0.0.8-SNAPSHOT</version>
   <name>Git factory</name>
   <properties>
     <github-repository>Git-factory</github-repository>
