@@ -38,8 +38,10 @@ public class GitConfigTests {
   void testConfigNotEmptied(@TempDir Path tempDir) throws Exception {
     StoredConfig config;
     try (Git git = Git.init().setDirectory(tempDir.toFile()).call()) {
+      /* https://github.com/eclipse-jgit/jgit/discussions/238 */
       config = git.getRepository().getConfig();
     }
+    assertEquals(ImmutableSet.of("core", "user", "alias", "init"), config.getSections());
     for (String section : config.getSections()) {
       {
         boolean changed = config.removeSection(section, null);
@@ -52,7 +54,7 @@ public class GitConfigTests {
     }
     config.save();
 
-    assertTrue(config.getSections().size() >= 6);
+    assertEquals(ImmutableSet.of("user", "alias", "init"), config.getSections());
   }
 
   @Test
