@@ -6,6 +6,7 @@
     <artifactId>pom</artifactId>
     <version>0.0.29</version>
   </parent>
+  <groupId>io.github.oliviercailloux.git</groupId>
   <artifactId>git-factory</artifactId>
   <version>0.0.7-SNAPSHOT</version>
   <name>Git factory</name>
