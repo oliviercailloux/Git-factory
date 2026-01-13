@@ -50,7 +50,7 @@ import org.eclipse.jgit.lib.TreeFormatter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/** Please switch to FactoGit. */
+/** @deprecated Please switch to FactoGit. */
 @Deprecated
 @SuppressWarnings("checkstyle:AbbreviationAsWordInName")
 public class JGit {
