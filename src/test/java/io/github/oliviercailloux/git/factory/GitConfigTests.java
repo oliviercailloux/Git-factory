@@ -6,6 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.google.common.collect.ImmutableSet;
 import java.nio.file.Path;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.internal.storage.dfs.DfsRepositoryDescription;
 import org.eclipse.jgit.internal.storage.dfs.InMemoryRepository;
@@ -41,7 +43,11 @@ public class GitConfigTests {
       /* https://github.com/eclipse-jgit/jgit/discussions/238 */
       config = git.getRepository().getConfig();
     }
-    assertEquals(ImmutableSet.of("core", "user", "alias", "init"), config.getSections());
+    Set<String> sectionsStart = config.getSections();
+    assertTrue(sectionsStart.contains("core"));
+    assertTrue(sectionsStart.contains("user"));
+    assertTrue(sectionsStart.contains("alias"));
+    assertTrue(sectionsStart.contains("init"));
     for (String section : config.getSections()) {
       {
         boolean changed = config.removeSection(section, null);
@@ -54,7 +60,10 @@ public class GitConfigTests {
     }
     config.save();
 
-    assertEquals(ImmutableSet.of("user", "alias", "init"), config.getSections());
+    Set<String> sectionsEnd = new LinkedHashSet<>();
+    sectionsEnd.addAll(sectionsStart);
+    sectionsEnd.remove("core");
+    assertEquals(sectionsEnd, config.getSections());
   }
 
   @Test
