@@ -4,6 +4,7 @@ import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.base.Verify.verify;
 
 import com.google.common.io.ByteSource;
+import com.google.common.io.CharSource;
 import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -44,6 +45,10 @@ public class FastImporter {
   }
 
   private FastImporter() {}
+
+  public DfsRepository importRepository(CharSource source) throws IOException {
+    return importRepository(ByteSource.wrap(source.read().getBytes(StandardCharsets.UTF_8)));
+  }
 
   public DfsRepository importRepository(ByteSource source) throws IOException {
     final InMemoryRepository repository =
