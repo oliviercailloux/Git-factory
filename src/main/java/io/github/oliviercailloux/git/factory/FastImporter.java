@@ -96,29 +96,27 @@ public class FastImporter {
     final int mark = readMark(stream);
     final PersonIdent author = readIdent(stream, "author");
     final PersonIdent committer = readIdent(stream, "committer");
-    String dataOrEncoding = readLine(stream);
-    if (dataOrEncoding != null && dataOrEncoding.startsWith("encoding ")) {
-      dataOrEncoding = readLine(stream);
+    String line = readLine(stream);
+    if (line != null && line.startsWith("encoding ")) {
+      line = readLine(stream);
     }
-    checkState(dataOrEncoding != null && dataOrEncoding.startsWith("data "),
-        "Expected data line, got: %s", dataOrEncoding);
-    final int msgLength = Integer.parseInt(dataOrEncoding.substring("data ".length()));
+    checkState(line != null && line.startsWith("data "), "Expected data line, got: %s", line);
+    final int msgLength = Integer.parseInt(line.substring("data ".length()));
     final String message = new String(readExactlyBytes(stream, msgLength), StandardCharsets.UTF_8);
 
-    String nextLine = readLine(stream);
+    line = readLine(stream);
     final List<ObjectId> parents = new ArrayList<>();
-    if (nextLine != null && nextLine.startsWith("from :")) {
-      parents.add(marks.get(Integer.parseInt(nextLine.substring("from :".length()))));
-      nextLine = readLine(stream);
+    if (line != null && line.startsWith("from :")) {
+      parents.add(marks.get(Integer.parseInt(line.substring("from :".length()))));
+      line = readLine(stream);
     }
-    while (nextLine != null && nextLine.startsWith("merge :")) {
-      parents.add(marks.get(Integer.parseInt(nextLine.substring("merge :".length()))));
-      nextLine = readLine(stream);
+    while (line != null && line.startsWith("merge :")) {
+      parents.add(marks.get(Integer.parseInt(line.substring("merge :".length()))));
+      line = readLine(stream);
     }
-    verify("deleteall".equals(nextLine), "Expected deleteall, got: %s", nextLine);
+    verify("deleteall".equals(line), "Expected deleteall, got: %s", line);
 
     final Map<String, MEntry> files = new LinkedHashMap<>();
-    String line;
     while ((line = readLine(stream)) != null && !line.isEmpty()) {
       if (line.startsWith("M ")) {
         final String[] parts = line.split(" ", 4);
