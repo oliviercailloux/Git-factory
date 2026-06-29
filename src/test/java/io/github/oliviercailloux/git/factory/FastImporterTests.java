@@ -19,6 +19,55 @@ import org.junit.jupiter.api.Test;
 
 public class FastImporterTests {
   @Test
+  void testTwoCommits() throws Exception {
+    try (DfsRepository repo = FastImporter.create()
+        .importRepository(Resourcer.charSource("two-commits.fast-export"));
+        Git git = Git.wrap(repo)) {
+      final ImmutableList<RevCommit> commits = ImmutableList.copyOf(git.log().call());
+      assertEquals(2, commits.size());
+
+      final RevCommit second = commits.get(0);
+      final RevCommit first = commits.get(1);
+
+      assertEquals("First commit\n", first.getFullMessage());
+      assertEquals(0, first.getParentCount());
+      assertEquals(Instant.ofEpochSecond(999985600), first.getAuthorIdent().getWhenAsInstant());
+
+      assertEquals("Second commit\n", second.getFullMessage());
+      assertEquals(1, second.getParentCount());
+      assertEquals(first.getId(), second.getParent(0).getId());
+      assertEquals(Instant.ofEpochSecond(999989200), second.getAuthorIdent().getWhenAsInstant());
+
+      try (TreeWalk treeWalk = new TreeWalk(repo)) {
+        treeWalk.addTree(first.getTree());
+        treeWalk.setRecursive(false);
+        assertTrue(treeWalk.next());
+        assertEquals("file1.txt", treeWalk.getNameString());
+        assertEquals(FileMode.REGULAR_FILE, treeWalk.getFileMode(0));
+        assertEquals("Hello world\n",
+            new String(repo.open(treeWalk.getObjectId(0)).getBytes(), StandardCharsets.UTF_8));
+        assertFalse(treeWalk.next());
+      }
+
+      try (TreeWalk treeWalk = new TreeWalk(repo)) {
+        treeWalk.addTree(second.getTree());
+        treeWalk.setRecursive(false);
+        assertTrue(treeWalk.next());
+        assertEquals("file1.txt", treeWalk.getNameString());
+        assertEquals(FileMode.REGULAR_FILE, treeWalk.getFileMode(0));
+        assertEquals("Hello world\n",
+            new String(repo.open(treeWalk.getObjectId(0)).getBytes(), StandardCharsets.UTF_8));
+        assertTrue(treeWalk.next());
+        assertEquals("file2.txt", treeWalk.getNameString());
+        assertEquals(FileMode.REGULAR_FILE, treeWalk.getFileMode(0));
+        assertEquals("Hello again\n",
+            new String(repo.open(treeWalk.getObjectId(0)).getBytes(), StandardCharsets.UTF_8));
+        assertFalse(treeWalk.next());
+      }
+    }
+  }
+
+  @Test
   void testBasic() throws Exception {
     try (DfsRepository repo = FastImporter.create()
         .importRepository(Resourcer.charSource("basic.fast-export"));

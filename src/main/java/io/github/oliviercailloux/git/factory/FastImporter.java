@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -86,8 +87,13 @@ public class FastImporter {
     final int msgLength = readDataLength(reader);
     final String message = readExactly(reader, msgLength);
 
-    final String deleteAllLine = reader.readLine();
-    verify("deleteall".equals(deleteAllLine), "Expected deleteall, got: %s", deleteAllLine);
+    String nextLine = reader.readLine();
+    final List<ObjectId> parents = new ArrayList<>();
+    if (nextLine != null && nextLine.startsWith("from :")) {
+      parents.add(marks.get(Integer.parseInt(nextLine.substring("from :".length()))));
+      nextLine = reader.readLine();
+    }
+    verify("deleteall".equals(nextLine), "Expected deleteall, got: %s", nextLine);
 
     final Map<String, ObjectId> files = new LinkedHashMap<>();
     String line;
@@ -100,7 +106,7 @@ public class FastImporter {
     }
 
     final ObjectId treeId = insertTree(inserter, files);
-    final ObjectId commitId = insertCommit(inserter, author, treeId, List.of(), message);
+    final ObjectId commitId = insertCommit(inserter, author, treeId, parents, message);
     marks.put(mark, commitId);
     LOGGER.debug("Inserted commit mark :{} → {}.", mark, commitId);
 
@@ -205,12 +211,12 @@ public class FastImporter {
       final RefUpdate updateRef = repository.updateRef("refs/heads/main");
       updateRef.setNewObjectId(newId);
       final Result result = updateRef.update();
-      verify(result == Result.NEW, result.toString());
+      verify(result == Result.NEW || result == Result.FAST_FORWARD, result.toString());
     }
     {
       final RefUpdate updateRef = repository.updateRef(Constants.HEAD);
       final Result result = updateRef.link("refs/heads/main");
-      verify(result == Result.FORCED, result.toString());
+      verify(result == Result.FORCED || result == Result.NO_CHANGE, result.toString());
     }
   }
 }
