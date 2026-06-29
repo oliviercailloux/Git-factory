@@ -1,0 +1,16 @@
+blob
+mark :1
+data 6
+Hello
+
+reset refs/heads/main
+commit refs/heads/main
+mark :2
+author Me <me@example.com> 999985600 +0000
+committer Me <me@example.com> 999985600 +0000
+data 15
+With submodule
+deleteall
+M 100644 :1 main.txt
+M 160000 da39a3ee5e6b4b0d3255bfef95601890afd80709 modules/sub
+

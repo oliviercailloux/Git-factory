@@ -1,0 +1,15 @@
+blob
+mark :1
+data 6
+café
+
+reset refs/heads/main
+commit refs/heads/main
+mark :2
+author Me <me@example.com> 999985600 +0000
+committer Me <me@example.com> 999985600 +0000
+data 13
+Unicode file
+deleteall
+M 100644 :1 file.txt
+

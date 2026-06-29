@@ -3,9 +3,11 @@ package io.github.oliviercailloux.git.factory;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.base.Verify.verify;
 
-import com.google.common.io.CharSource;
-import java.io.BufferedReader;
+import com.google.common.io.ByteSource;
+import java.io.BufferedInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -14,8 +16,8 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import org.eclipse.jgit.internal.storage.dfs.DfsRepositoryDescription;
 import org.eclipse.jgit.internal.storage.dfs.DfsRepository;
+import org.eclipse.jgit.internal.storage.dfs.DfsRepositoryDescription;
 import org.eclipse.jgit.internal.storage.dfs.InMemoryRepository;
 import org.eclipse.jgit.lib.CommitBuilder;
 import org.eclipse.jgit.lib.Constants;
@@ -26,12 +28,14 @@ import org.eclipse.jgit.lib.PersonIdent;
 import org.eclipse.jgit.lib.RefUpdate;
 import org.eclipse.jgit.lib.RefUpdate.Result;
 import org.eclipse.jgit.lib.Repository;
+import org.eclipse.jgit.lib.TagBuilder;
 import org.eclipse.jgit.lib.TreeFormatter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class FastImporter {
   private record MEntry(FileMode mode, ObjectId oid) {}
+
   @SuppressWarnings("unused")
   private static final Logger LOGGER = LoggerFactory.getLogger(FastImporter.class);
 
@@ -41,27 +45,30 @@ public class FastImporter {
 
   private FastImporter() {}
 
-  public DfsRepository importRepository(CharSource source) throws IOException {
+  public DfsRepository importRepository(ByteSource source) throws IOException {
     final InMemoryRepository repository =
         new InMemoryRepository(new DfsRepositoryDescription(""));
     repository.create(true);
 
     final Map<Integer, ObjectId> marks = new HashMap<>();
 
-    try (BufferedReader reader = source.openBufferedStream();
+    try (InputStream stream = new BufferedInputStream(source.openStream());
         ObjectInserter inserter = repository.getObjectDatabase().newInserter()) {
       String line;
-      while ((line = reader.readLine()) != null) {
+      while ((line = readLine(stream)) != null) {
         if (line.isEmpty()) {
           continue;
         }
         if (line.equals("blob")) {
-          readBlob(reader, inserter, marks);
+          readBlob(stream, inserter, marks);
         } else if (line.startsWith("reset ")) {
           // skip
         } else if (line.startsWith("commit ")) {
           final String ref = line.substring("commit ".length());
-          readCommit(reader, inserter, marks, repository, ref);
+          readCommit(stream, inserter, marks, repository, ref);
+        } else if (line.startsWith("tag ")) {
+          final String tagName = line.substring("tag ".length());
+          readTag(stream, inserter, marks, repository, tagName);
         }
       }
     }
@@ -69,84 +76,149 @@ public class FastImporter {
     return repository;
   }
 
-  private static void readBlob(BufferedReader reader, ObjectInserter inserter,
+  private static void readBlob(InputStream stream, ObjectInserter inserter,
       Map<Integer, ObjectId> marks) throws IOException {
-    final int mark = readMark(reader);
-    final int length = readDataLength(reader);
-    final String content = readExactly(reader, length);
-    final ObjectId oid =
-        inserter.insert(Constants.OBJ_BLOB, content.getBytes(StandardCharsets.UTF_8));
+    final int mark = readMark(stream);
+    final int length = readDataLength(stream);
+    final byte[] content = readExactlyBytes(stream, length);
+    final ObjectId oid = inserter.insert(Constants.OBJ_BLOB, content);
     marks.put(mark, oid);
     LOGGER.debug("Inserted blob mark :{} → {}.", mark, oid);
   }
 
-  private static void readCommit(BufferedReader reader, ObjectInserter inserter,
+  private static void readCommit(InputStream stream, ObjectInserter inserter,
       Map<Integer, ObjectId> marks, InMemoryRepository repository, String ref) throws IOException {
-    final int mark = readMark(reader);
-    final PersonIdent author = readIdent(reader, "author");
-    skipPrefix(reader, "committer ");
-    final int msgLength = readDataLength(reader);
-    final String message = readExactly(reader, msgLength);
+    final int mark = readMark(stream);
+    final PersonIdent author = readIdent(stream, "author");
+    final PersonIdent committer = readIdent(stream, "committer");
+    String dataOrEncoding = readLine(stream);
+    if (dataOrEncoding != null && dataOrEncoding.startsWith("encoding ")) {
+      dataOrEncoding = readLine(stream);
+    }
+    checkState(dataOrEncoding != null && dataOrEncoding.startsWith("data "),
+        "Expected data line, got: %s", dataOrEncoding);
+    final int msgLength = Integer.parseInt(dataOrEncoding.substring("data ".length()));
+    final String message = new String(readExactlyBytes(stream, msgLength), StandardCharsets.UTF_8);
 
-    String nextLine = reader.readLine();
+    String nextLine = readLine(stream);
     final List<ObjectId> parents = new ArrayList<>();
     if (nextLine != null && nextLine.startsWith("from :")) {
       parents.add(marks.get(Integer.parseInt(nextLine.substring("from :".length()))));
-      nextLine = reader.readLine();
+      nextLine = readLine(stream);
     }
     while (nextLine != null && nextLine.startsWith("merge :")) {
       parents.add(marks.get(Integer.parseInt(nextLine.substring("merge :".length()))));
-      nextLine = reader.readLine();
+      nextLine = readLine(stream);
     }
     verify("deleteall".equals(nextLine), "Expected deleteall, got: %s", nextLine);
 
     final Map<String, MEntry> files = new LinkedHashMap<>();
     String line;
-    while ((line = reader.readLine()) != null && !line.isEmpty()) {
+    while ((line = readLine(stream)) != null && !line.isEmpty()) {
       if (line.startsWith("M ")) {
         final String[] parts = line.split(" ", 4);
         final FileMode mode = FileMode.fromBits(Integer.parseInt(parts[1], 8));
-        final int blobMark = Integer.parseInt(parts[2].substring(1));
-        files.put(parts[3], new MEntry(mode, marks.get(blobMark)));
+        final ObjectId oid = parts[2].startsWith(":")
+            ? marks.get(Integer.parseInt(parts[2].substring(1)))
+            : ObjectId.fromString(parts[2]);
+        files.put(parts[3], new MEntry(mode, oid));
       }
     }
 
     final ObjectId treeId = insertTree(inserter, files);
-    final ObjectId commitId = insertCommit(inserter, author, treeId, parents, message);
+    final ObjectId commitId = insertCommit(inserter, author, committer, treeId, parents, message);
     marks.put(mark, commitId);
     LOGGER.debug("Inserted commit mark :{} → {}.", mark, commitId);
 
     setRef(repository, ref, commitId);
   }
 
-  private static int readMark(BufferedReader reader) throws IOException {
-    final String line = reader.readLine();
+  private static void readTag(InputStream stream, ObjectInserter inserter,
+      Map<Integer, ObjectId> marks, InMemoryRepository repository, String tagName)
+      throws IOException {
+    String line = readLine(stream);
+    Integer markNum = null;
+    if (line != null && line.startsWith("mark :")) {
+      markNum = Integer.parseInt(line.substring("mark :".length()));
+      line = readLine(stream);
+    }
+    checkState(line != null && line.startsWith("from "), "Expected from in tag, got: %s", line);
+    final String fromStr = line.substring("from ".length());
+    final ObjectId taggedId = fromStr.startsWith(":")
+        ? marks.get(Integer.parseInt(fromStr.substring(1)))
+        : ObjectId.fromString(fromStr);
+
+    line = readLine(stream);
+    PersonIdent tagger = null;
+    if (line != null && line.startsWith("tagger ")) {
+      tagger = parseIdent(line.substring("tagger ".length()));
+      line = readLine(stream);
+    }
+
+    checkState(line != null && line.startsWith("data "), "Expected data in tag, got: %s", line);
+    final int msgLength = Integer.parseInt(line.substring("data ".length()));
+    final String message = new String(readExactlyBytes(stream, msgLength), StandardCharsets.UTF_8);
+
+    final TagBuilder tagBuilder = new TagBuilder();
+    tagBuilder.setTag(tagName);
+    tagBuilder.setObjectId(taggedId, Constants.OBJ_COMMIT);
+    if (tagger != null) {
+      tagBuilder.setTagger(tagger);
+    }
+    tagBuilder.setMessage(message);
+    final ObjectId tagId = inserter.insert(tagBuilder);
+    inserter.flush();
+    if (markNum != null) {
+      marks.put(markNum, tagId);
+    }
+
+    final RefUpdate updateRef = repository.updateRef("refs/tags/" + tagName);
+    updateRef.setNewObjectId(tagId);
+    final Result result = updateRef.forceUpdate();
+    verify(result == Result.NEW || result == Result.FORCED, result.toString());
+  }
+
+  private static String readLine(InputStream stream) throws IOException {
+    final ByteArrayOutputStream buf = new ByteArrayOutputStream();
+    int b;
+    while ((b = stream.read()) != -1) {
+      if (b == '\n') {
+        break;
+      }
+      buf.write(b);
+    }
+    if (b == -1 && buf.size() == 0) {
+      return null;
+    }
+    return buf.toString(StandardCharsets.US_ASCII);
+  }
+
+  private static int readMark(InputStream stream) throws IOException {
+    final String line = readLine(stream);
     checkState(line != null && line.startsWith("mark :"), "Expected mark line, got: %s", line);
     return Integer.parseInt(line.substring("mark :".length()));
   }
 
-  private static int readDataLength(BufferedReader reader) throws IOException {
-    final String line = reader.readLine();
+  private static int readDataLength(InputStream stream) throws IOException {
+    final String line = readLine(stream);
     checkState(line != null && line.startsWith("data "), "Expected data line, got: %s", line);
     return Integer.parseInt(line.substring("data ".length()));
   }
 
-  private static String readExactly(BufferedReader reader, int length) throws IOException {
-    final char[] buf = new char[length];
-    int read = 0;
-    while (read < length) {
-      final int n = reader.read(buf, read, length - read);
-      checkState(n != -1, "Unexpected end of stream reading data block of length %s", length);
-      read += n;
-    }
-    return new String(buf);
+  private static byte[] readExactlyBytes(InputStream stream, int length) throws IOException {
+    final byte[] buf = stream.readNBytes(length);
+    checkState(buf.length == length, "Expected %s bytes, got %s", length, buf.length);
+    return buf;
   }
 
-  private static PersonIdent readIdent(BufferedReader reader, String prefix) throws IOException {
-    final String line = reader.readLine();
+  private static PersonIdent readIdent(InputStream stream, String prefix) throws IOException {
+    final String line = readLine(stream);
     checkState(line != null && line.startsWith(prefix + " "), "Expected %s line, got: %s", prefix,
         line);
-    final String rest = line.substring(prefix.length() + 1);
+    return parseIdent(line.substring(prefix.length() + 1));
+  }
+
+  private static PersonIdent parseIdent(String rest) {
     final int lt = rest.indexOf('<');
     final int gt = rest.indexOf('>');
     final String name = rest.substring(0, lt).trim();
@@ -156,28 +228,25 @@ public class FastImporter {
         ZoneOffset.of(timeParts[1]));
   }
 
-  private static void skipPrefix(BufferedReader reader, String prefix) throws IOException {
-    final String line = reader.readLine();
-    checkState(line != null && line.startsWith(prefix), "Expected line starting with %s, got: %s",
-        prefix, line);
-  }
-
   private static ObjectId insertTree(ObjectInserter inserter, Map<String, MEntry> files)
       throws IOException {
     final Map<String, Object> tree = new LinkedHashMap<>();
     for (Map.Entry<String, MEntry> entry : files.entrySet()) {
-      final String path = entry.getKey();
-      final int slash = path.indexOf('/');
-      if (slash < 0) {
-        tree.put(path, entry.getValue());
-      } else {
-        @SuppressWarnings("unchecked")
-        final Map<String, Object> subtree = (Map<String, Object>) tree.computeIfAbsent(
-            path.substring(0, slash), k -> new LinkedHashMap<>());
-        subtree.put(path.substring(slash + 1), entry.getValue());
-      }
+      putEntry(tree, entry.getKey(), entry.getValue());
     }
     return insertTreeNode(inserter, tree);
+  }
+
+  @SuppressWarnings("unchecked")
+  private static void putEntry(Map<String, Object> tree, String path, MEntry entry) {
+    final int slash = path.indexOf('/');
+    if (slash < 0) {
+      tree.put(path, entry);
+    } else {
+      final Map<String, Object> subtree = (Map<String, Object>) tree.computeIfAbsent(
+          path.substring(0, slash), k -> new LinkedHashMap<>());
+      putEntry(subtree, path.substring(slash + 1), entry);
+    }
   }
 
   @SuppressWarnings("unchecked")
@@ -196,11 +265,12 @@ public class FastImporter {
   }
 
   private static ObjectId insertCommit(ObjectInserter inserter, PersonIdent author,
-      ObjectId treeId, List<ObjectId> parents, String message) throws IOException {
+      PersonIdent committer, ObjectId treeId, List<ObjectId> parents, String message)
+      throws IOException {
     final CommitBuilder commitBuilder = new CommitBuilder();
     commitBuilder.setMessage(message);
     commitBuilder.setAuthor(author);
-    commitBuilder.setCommitter(author);
+    commitBuilder.setCommitter(committer);
     commitBuilder.setTreeId(treeId);
     for (ObjectId parent : parents) {
       commitBuilder.addParentId(parent);

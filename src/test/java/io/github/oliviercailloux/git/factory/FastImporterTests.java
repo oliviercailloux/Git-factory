@@ -13,16 +13,157 @@ import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.internal.storage.dfs.DfsRepository;
 import org.eclipse.jgit.lib.Constants;
 import org.eclipse.jgit.lib.FileMode;
+import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.PersonIdent;
 import org.eclipse.jgit.revwalk.RevCommit;
+import org.eclipse.jgit.revwalk.RevTag;
+import org.eclipse.jgit.revwalk.RevWalk;
 import org.eclipse.jgit.treewalk.TreeWalk;
 import org.junit.jupiter.api.Test;
 
 public class FastImporterTests {
   @Test
+  void testUnicode() throws Exception {
+    try (DfsRepository repo = FastImporter.create()
+        .importRepository(Resourcer.byteSource("unicode.fast-export"));
+        Git git = Git.wrap(repo)) {
+      final RevCommit commit = ImmutableList.copyOf(git.log().call()).get(0);
+      try (TreeWalk treeWalk = new TreeWalk(repo)) {
+        treeWalk.addTree(commit.getTree());
+        treeWalk.setRecursive(false);
+        assertTrue(treeWalk.next());
+        assertEquals("file.txt", treeWalk.getNameString());
+        final byte[] bytes = repo.open(treeWalk.getObjectId(0)).getBytes();
+        assertEquals(6, bytes.length);
+        assertEquals("café\n", new String(bytes, StandardCharsets.UTF_8));
+        assertFalse(treeWalk.next());
+      }
+    }
+  }
+
+  @Test
+  void testGitlink() throws Exception {
+    try (DfsRepository repo = FastImporter.create()
+        .importRepository(Resourcer.byteSource("gitlink.fast-export"));
+        Git git = Git.wrap(repo)) {
+      final RevCommit commit = ImmutableList.copyOf(git.log().call()).get(0);
+      try (TreeWalk treeWalk = new TreeWalk(repo)) {
+        treeWalk.addTree(commit.getTree());
+        treeWalk.setRecursive(false);
+        assertTrue(treeWalk.next());
+        assertEquals("main.txt", treeWalk.getNameString());
+        assertEquals(FileMode.REGULAR_FILE, treeWalk.getFileMode(0));
+        assertTrue(treeWalk.next());
+        assertEquals("modules", treeWalk.getNameString());
+        assertEquals(FileMode.TREE, treeWalk.getFileMode(0));
+        assertFalse(treeWalk.next());
+      }
+      try (TreeWalk treeWalk = new TreeWalk(repo)) {
+        treeWalk.addTree(commit.getTree());
+        treeWalk.setRecursive(true);
+        assertTrue(treeWalk.next());
+        assertEquals("main.txt", treeWalk.getNameString());
+        assertTrue(treeWalk.next());
+        assertEquals("modules/sub", treeWalk.getPathString());
+        assertEquals(FileMode.GITLINK, treeWalk.getFileMode(0));
+        assertEquals(ObjectId.fromString("da39a3ee5e6b4b0d3255bfef95601890afd80709"),
+            treeWalk.getObjectId(0));
+        assertFalse(treeWalk.next());
+      }
+    }
+  }
+
+  @Test
+  void testAnnotatedTag() throws Exception {
+    try (DfsRepository repo = FastImporter.create()
+        .importRepository(Resourcer.byteSource("annotated-tag.fast-export"))) {
+      final var tagRefId = repo.resolve("refs/tags/v1.0");
+      assertNotNull(tagRefId);
+      try (RevWalk rw = new RevWalk(repo)) {
+        final RevTag tag = rw.parseTag(tagRefId);
+        assertEquals("Version 1.0\n", tag.getFullMessage());
+        assertEquals("Me", tag.getTaggerIdent().getName());
+        assertEquals("me@example.com", tag.getTaggerIdent().getEmailAddress());
+        assertEquals(Instant.ofEpochSecond(999989200), tag.getTaggerIdent().getWhenAsInstant());
+        final RevCommit commit = rw.parseCommit(tag.getObject().getId());
+        assertEquals("Initial commit\n", commit.getFullMessage());
+      }
+    }
+  }
+
+  @Test
+  void testSymlink() throws Exception {
+    try (DfsRepository repo = FastImporter.create()
+        .importRepository(Resourcer.byteSource("symlink.fast-export"));
+        Git git = Git.wrap(repo)) {
+      final RevCommit commit = ImmutableList.copyOf(git.log().call()).get(0);
+      try (TreeWalk treeWalk = new TreeWalk(repo)) {
+        treeWalk.addTree(commit.getTree());
+        treeWalk.setRecursive(false);
+        assertTrue(treeWalk.next());
+        assertEquals("link.txt", treeWalk.getNameString());
+        assertEquals(FileMode.SYMLINK, treeWalk.getFileMode(0));
+        assertEquals("target.txt",
+            new String(repo.open(treeWalk.getObjectId(0)).getBytes(), StandardCharsets.UTF_8));
+        assertTrue(treeWalk.next());
+        assertEquals("target.txt", treeWalk.getNameString());
+        assertEquals(FileMode.REGULAR_FILE, treeWalk.getFileMode(0));
+        assertFalse(treeWalk.next());
+      }
+    }
+  }
+
+  @Test
+  void testEncoding() throws Exception {
+    try (DfsRepository repo = FastImporter.create()
+        .importRepository(Resourcer.byteSource("encoding.fast-export"));
+        Git git = Git.wrap(repo)) {
+      final RevCommit commit = ImmutableList.copyOf(git.log().call()).get(0);
+      assertEquals("Encoded commit\n", commit.getFullMessage());
+      assertEquals("Me", commit.getAuthorIdent().getName());
+    }
+  }
+
+  @Test
+  void testMultilevelDir() throws Exception {
+    try (DfsRepository repo = FastImporter.create()
+        .importRepository(Resourcer.byteSource("multilevel-dir.fast-export"));
+        Git git = Git.wrap(repo)) {
+      final RevCommit commit = ImmutableList.copyOf(git.log().call()).get(0);
+      try (TreeWalk treeWalk = new TreeWalk(repo)) {
+        treeWalk.addTree(commit.getTree());
+        treeWalk.setRecursive(true);
+        assertTrue(treeWalk.next());
+        assertEquals("src/main/java/Main.java", treeWalk.getPathString());
+        assertEquals(FileMode.REGULAR_FILE, treeWalk.getFileMode(0));
+        assertEquals("public class Main {}\n",
+            new String(repo.open(treeWalk.getObjectId(0)).getBytes(), StandardCharsets.UTF_8));
+        assertFalse(treeWalk.next());
+      }
+    }
+  }
+
+  @Test
+  void testDistinctCommitter() throws Exception {
+    try (DfsRepository repo = FastImporter.create()
+        .importRepository(Resourcer.byteSource("distinct-committer.fast-export"));
+        Git git = Git.wrap(repo)) {
+      final RevCommit commit = ImmutableList.copyOf(git.log().call()).get(0);
+      final PersonIdent author = commit.getAuthorIdent();
+      assertEquals("Alice", author.getName());
+      assertEquals("alice@example.com", author.getEmailAddress());
+      assertEquals(Instant.ofEpochSecond(999985600), author.getWhenAsInstant());
+      final PersonIdent committer = commit.getCommitterIdent();
+      assertEquals("Bob", committer.getName());
+      assertEquals("bob@example.com", committer.getEmailAddress());
+      assertEquals(Instant.ofEpochSecond(999989200), committer.getWhenAsInstant());
+    }
+  }
+
+  @Test
   void testMergeCommit() throws Exception {
     try (DfsRepository repo = FastImporter.create()
-        .importRepository(Resourcer.charSource("merge-commit.fast-export"));
+        .importRepository(Resourcer.byteSource("merge-commit.fast-export"));
         Git git = Git.wrap(repo)) {
       final var mainId = repo.resolve("refs/heads/main");
       final var featureId = repo.resolve("refs/heads/feature");
@@ -56,7 +197,7 @@ public class FastImporterTests {
   @Test
   void testTwoBranches() throws Exception {
     try (DfsRepository repo = FastImporter.create()
-        .importRepository(Resourcer.charSource("two-branches.fast-export"))) {
+        .importRepository(Resourcer.byteSource("two-branches.fast-export"))) {
       final var mainId = repo.resolve("refs/heads/main");
       final var featureId = repo.resolve("refs/heads/feature");
       assertNotNull(mainId);
@@ -80,7 +221,7 @@ public class FastImporterTests {
   @Test
   void testExecutableMode() throws Exception {
     try (DfsRepository repo = FastImporter.create()
-        .importRepository(Resourcer.charSource("executable-mode.fast-export"));
+        .importRepository(Resourcer.byteSource("executable-mode.fast-export"));
         Git git = Git.wrap(repo)) {
       final RevCommit commit = ImmutableList.copyOf(git.log().call()).get(0);
 
@@ -101,7 +242,7 @@ public class FastImporterTests {
   @Test
   void testSubdirTimezone() throws Exception {
     try (DfsRepository repo = FastImporter.create()
-        .importRepository(Resourcer.charSource("subdir-timezone.fast-export"));
+        .importRepository(Resourcer.byteSource("subdir-timezone.fast-export"));
         Git git = Git.wrap(repo)) {
       final ImmutableList<RevCommit> commits = ImmutableList.copyOf(git.log().call());
       assertEquals(1, commits.size());
@@ -134,7 +275,7 @@ public class FastImporterTests {
   @Test
   void testTwoCommits() throws Exception {
     try (DfsRepository repo = FastImporter.create()
-        .importRepository(Resourcer.charSource("two-commits.fast-export"));
+        .importRepository(Resourcer.byteSource("two-commits.fast-export"));
         Git git = Git.wrap(repo)) {
       final ImmutableList<RevCommit> commits = ImmutableList.copyOf(git.log().call());
       assertEquals(2, commits.size());
@@ -183,7 +324,7 @@ public class FastImporterTests {
   @Test
   void testBasic() throws Exception {
     try (DfsRepository repo = FastImporter.create()
-        .importRepository(Resourcer.charSource("basic.fast-export"));
+        .importRepository(Resourcer.byteSource("basic.fast-export"));
         Git git = Git.wrap(repo)) {
       final ImmutableList<RevCommit> commits = ImmutableList.copyOf(git.log().call());
       assertEquals(1, commits.size());

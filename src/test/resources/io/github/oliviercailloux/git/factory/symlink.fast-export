@@ -1,0 +1,20 @@
+blob
+mark :1
+data 10
+target.txt
+blob
+mark :2
+data 8
+content
+
+reset refs/heads/main
+commit refs/heads/main
+mark :3
+author Me <me@example.com> 999985600 +0000
+committer Me <me@example.com> 999985600 +0000
+data 15
+Initial commit
+deleteall
+M 120000 :1 link.txt
+M 100644 :2 target.txt
+
