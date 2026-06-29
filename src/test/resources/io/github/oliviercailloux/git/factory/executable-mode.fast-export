@@ -1,0 +1,22 @@
+blob
+mark :1
+data 10
+key=value
+
+blob
+mark :2
+data 21
+#!/bin/sh
+echo hello
+
+reset refs/heads/main
+commit refs/heads/main
+mark :3
+author Me <me@example.com> 999985600 +0000
+committer Me <me@example.com> 999985600 +0000
+data 15
+Initial commit
+deleteall
+M 100644 :1 config.txt
+M 100755 :2 run.sh
+

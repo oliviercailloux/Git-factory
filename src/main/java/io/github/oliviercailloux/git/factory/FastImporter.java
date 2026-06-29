@@ -31,6 +31,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class FastImporter {
+  private record MEntry(FileMode mode, ObjectId oid) {}
   @SuppressWarnings("unused")
   private static final Logger LOGGER = LoggerFactory.getLogger(FastImporter.class);
 
@@ -93,15 +94,20 @@ public class FastImporter {
       parents.add(marks.get(Integer.parseInt(nextLine.substring("from :".length()))));
       nextLine = reader.readLine();
     }
+    while (nextLine != null && nextLine.startsWith("merge :")) {
+      parents.add(marks.get(Integer.parseInt(nextLine.substring("merge :".length()))));
+      nextLine = reader.readLine();
+    }
     verify("deleteall".equals(nextLine), "Expected deleteall, got: %s", nextLine);
 
-    final Map<String, ObjectId> files = new LinkedHashMap<>();
+    final Map<String, MEntry> files = new LinkedHashMap<>();
     String line;
     while ((line = reader.readLine()) != null && !line.isEmpty()) {
       if (line.startsWith("M ")) {
         final String[] parts = line.split(" ", 4);
+        final FileMode mode = FileMode.fromBits(Integer.parseInt(parts[1], 8));
         final int blobMark = Integer.parseInt(parts[2].substring(1));
-        files.put(parts[3], marks.get(blobMark));
+        files.put(parts[3], new MEntry(mode, marks.get(blobMark)));
       }
     }
 
@@ -110,9 +116,7 @@ public class FastImporter {
     marks.put(mark, commitId);
     LOGGER.debug("Inserted commit mark :{} → {}.", mark, commitId);
 
-    if (ref.equals("refs/heads/main")) {
-      setMainAndHead(repository, commitId);
-    }
+    setRef(repository, ref, commitId);
   }
 
   private static int readMark(BufferedReader reader) throws IOException {
@@ -158,10 +162,10 @@ public class FastImporter {
         prefix, line);
   }
 
-  private static ObjectId insertTree(ObjectInserter inserter, Map<String, ObjectId> files)
+  private static ObjectId insertTree(ObjectInserter inserter, Map<String, MEntry> files)
       throws IOException {
     final Map<String, Object> tree = new LinkedHashMap<>();
-    for (Map.Entry<String, ObjectId> entry : files.entrySet()) {
+    for (Map.Entry<String, MEntry> entry : files.entrySet()) {
       final String path = entry.getKey();
       final int slash = path.indexOf('/');
       if (slash < 0) {
@@ -181,8 +185,8 @@ public class FastImporter {
       throws IOException {
     final TreeFormatter formatter = new TreeFormatter();
     for (Map.Entry<String, Object> entry : tree.entrySet()) {
-      if (entry.getValue() instanceof ObjectId oid) {
-        formatter.append(entry.getKey(), FileMode.REGULAR_FILE, oid);
+      if (entry.getValue() instanceof MEntry me) {
+        formatter.append(entry.getKey(), me.mode(), me.oid());
       } else {
         formatter.append(entry.getKey(), FileMode.TREE,
             insertTreeNode(inserter, (Map<String, Object>) entry.getValue()));
@@ -206,17 +210,16 @@ public class FastImporter {
     return commitId;
   }
 
-  private static void setMainAndHead(Repository repository, ObjectId newId) throws IOException {
-    {
-      final RefUpdate updateRef = repository.updateRef("refs/heads/main");
-      updateRef.setNewObjectId(newId);
-      final Result result = updateRef.update();
-      verify(result == Result.NEW || result == Result.FAST_FORWARD, result.toString());
-    }
-    {
-      final RefUpdate updateRef = repository.updateRef(Constants.HEAD);
-      final Result result = updateRef.link("refs/heads/main");
-      verify(result == Result.FORCED || result == Result.NO_CHANGE, result.toString());
+  private static void setRef(Repository repository, String ref, ObjectId newId)
+      throws IOException {
+    final RefUpdate updateRef = repository.updateRef(ref);
+    updateRef.setNewObjectId(newId);
+    final Result result = updateRef.update();
+    verify(result == Result.NEW || result == Result.FAST_FORWARD, result.toString());
+    if (ref.equals("refs/heads/main")) {
+      final RefUpdate headUpdate = repository.updateRef(Constants.HEAD);
+      final Result headResult = headUpdate.link("refs/heads/main");
+      verify(headResult == Result.FORCED || headResult == Result.NO_CHANGE, headResult.toString());
     }
   }
 }
