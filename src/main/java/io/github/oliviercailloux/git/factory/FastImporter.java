@@ -35,7 +35,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class FastImporter {
-  private record MEntry(FileMode mode, ObjectId oid) {}
+  private static record MEntry(FileMode mode, ObjectId oid) {}
 
   @SuppressWarnings("unused")
   private static final Logger LOGGER = LoggerFactory.getLogger(FastImporter.class);
