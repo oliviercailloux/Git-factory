@@ -390,6 +390,43 @@ public class FactoGitNewTests {
     }
   }
 
+  /**
+   * Git requires tree entries to be sorted by its own rule: directories sort as if their name had
+   * a trailing {@code /} appended. This differs from plain alphabetical order when a directory
+   * name is a prefix of a file name: {@code '.'} (0x2E) {@literal <} {@code '/'} (0x2F), so
+   * {@code "a.txt"} must come before directory {@code "a/"} in git order, but alphabetical order
+   * puts {@code "a"} before {@code "a.txt"}.
+   *
+   * <p>This test will fail until {@code insertTree} sorts entries by git's comparator before
+   * appending them to the {@link org.eclipse.jgit.lib.TreeFormatter}.
+   */
+  @Test
+  void testTreeEntryOrdering() throws Exception {
+    try (FileSystem fs = Jimfs.newFileSystem(Configuration.unix())) {
+      Path p = fs.getPath("commit");
+      // "a.txt" must sort before directory "a/" in git order ('.' < '/'),
+      // but alphabetical listing puts "a" before "a.txt".
+      Files.createDirectories(p.resolve("a"));
+      Files.writeString(p.resolve("a").resolve("nested.txt"), "nested");
+      Files.writeString(p.resolve("a.txt"), "a");
+
+      try (DfsRepository repo = FactoGitNew.empty().withRoot(p).repo()) {
+        try (RevWalk rw = new RevWalk(repo)) {
+          RevCommit commit = rw.parseCommit(repo.resolve("refs/heads/main"));
+          try (TreeWalk tw = new TreeWalk(repo)) {
+            tw.addTree(commit.getTree());
+            tw.setRecursive(false);
+            assertTrue(tw.next());
+            assertEquals("a.txt", tw.getNameString()); // file before same-prefixed directory
+            assertTrue(tw.next());
+            assertEquals("a", tw.getNameString());
+            assertFalse(tw.next());
+          }
+        }
+      }
+    }
+  }
+
   /** Returns all commits reachable from HEAD, keyed by short message. */
   private static Map<String, RevCommit> commitsByMessage(DfsRepository repo) throws Exception {
     Map<String, RevCommit> result = new HashMap<>();
