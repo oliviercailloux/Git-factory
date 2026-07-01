@@ -192,7 +192,7 @@ public class FactoGitNew {
     this.commitMessages = checkNotNull(commitMessages);
   }
 
-  public FactoGitNew withName(String newName) {
+  public FactoGitNew named(String newName) {
     return new FactoGitNew(checkNotNull(newName), dag, committers, commitMessages);
   }
 
