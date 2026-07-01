@@ -85,15 +85,14 @@ public class FactoGitNew {
    */
   public static FactoGitNew ofDag(Graph<Path> dag) {
     checkArgument(!Graphs.hasCycle(dag));
-    return new FactoGitNew(defaultName(), ImmutableGraph.copyOf(dag), DEFAULT_COMMITTERS,
-        DEFAULT_MESSAGES);
+    return new FactoGitNew(defaultName(), ImmutableGraph.copyOf(dag), DEFAULT_COMMITTERS, DEFAULT_MESSAGES);
   }
 
   private static String defaultName() {
     return "factogit-created on " + Instant.now().truncatedTo(ChronoUnit.MILLIS);
   }
 
-  private static MutableGraph<Path> mutableCopy(ImmutableGraph<Path> source) {
+  private static MutableGraph<Path> mutableCopy(Graph<Path> source) {
     MutableGraph<Path> copy = GraphBuilder.from(source).build();
     source.nodes().forEach(copy::addNode);
     source.edges().forEach(e -> copy.putEdge(e.nodeU(), e.nodeV()));
@@ -244,11 +243,13 @@ public class FactoGitNew {
   public FactoGitNew withChild(Path parent, Path child) {
     MutableGraph<Path> copy = mutableCopy(dag);
     copy.putEdge(parent, child);
-    ImmutableGraph<Path> newDag = ImmutableGraph.copyOf(copy);
-    checkArgument(!Graphs.hasCycle(newDag));
-    return new FactoGitNew(name, newDag, committers, commitMessages);
+    checkArgument(!Graphs.hasCycle(copy));
+    return new FactoGitNew(name, ImmutableGraph.copyOf(copy), committers, commitMessages);
   }
 
+  /**
+   * Returns the DAG.
+   */
   public ImmutableGraph<Path> dag() {
     return dag;
   }
@@ -260,18 +261,19 @@ public class FactoGitNew {
    * set to the last node visited in breadth-first order from all roots.
    */
   public DfsRepository repo() throws IOException {
-    TFunction<Path, IdStamp, IOException> ourCommitters = committers.summon(dag);
-    TFunction<Path, String, IOException> ourMessages = commitMessages.summon(dag);
+    Graph<Path> graph = dag;
+    TFunction<Path, IdStamp, IOException> ourCommitters = committers.summon(graph);
+    TFunction<Path, String, IOException> ourMessages = commitMessages.summon(graph);
 
     InMemoryRepository repository = new InMemoryRepository(new DfsRepositoryDescription(name));
     repository.create(true);
 
-    ImmutableSet<Path> topoOrder = GraphUtils.topologicallySortedNodes(dag);
-    BiMap<Path, ObjectId> commitsMap = HashBiMap.create(dag.nodes().size());
+    ImmutableSet<Path> topoOrder = GraphUtils.topologicallySortedNodes(graph);
+    BiMap<Path, ObjectId> commitsMap = HashBiMap.create(graph.nodes().size());
 
     try (ObjectInserter inserter = repository.getObjectDatabase().newInserter()) {
       for (Path source : topoOrder) {
-        Set<Path> parentPaths = dag.predecessors(source);
+        Set<Path> parentPaths = graph.predecessors(source);
         ImmutableList<ObjectId> parents = parentPaths.stream()
             .map(commitsMap::get)
             .collect(ImmutableSet.toImmutableSet())
@@ -284,12 +286,12 @@ public class FactoGitNew {
     }
     ImmutableBiMap<Path, ObjectId> commits = ImmutableBiMap.copyOf(commitsMap);
 
-    if (!dag.nodes().isEmpty()) {
-      ImmutableSet<Path> roots = dag.nodes().stream()
-          .filter(n -> dag.inDegree(n) == 0)
+    if (!graph.nodes().isEmpty()) {
+      ImmutableSet<Path> roots = graph.nodes().stream()
+          .filter(n -> graph.inDegree(n) == 0)
           .collect(ImmutableSet.toImmutableSet());
       Path bfsLast = null;
-      for (Path node : Traverser.<Path>forGraph(dag::successors).breadthFirst(roots)) {
+      for (Path node : Traverser.<Path>forGraph(graph::successors).breadthFirst(roots)) {
         bfsLast = node;
       }
       setMainAndHead(repository, commits.get(bfsLast));
