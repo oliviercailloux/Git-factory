@@ -26,6 +26,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.IntStream;
@@ -104,26 +105,37 @@ public class FactoGitNew {
         ident.timestamp().getZone());
   }
 
-  private static ObjectId insertCommit(ObjectInserter inserter, PersonIdent personIdent,
-      Path directory, List<ObjectId> parents, String commitMessage) throws IOException {
-    ObjectId treeId = insertTree(inserter, directory);
+  /** Builds and inserts one commit object. Does not flush; the caller is responsible. */
+  static ObjectId insertCommit(ObjectInserter inserter, PersonIdent author, PersonIdent committer,
+      ObjectId treeId, List<ObjectId> parents, String message) throws IOException {
     CommitBuilder commitBuilder = new CommitBuilder();
-    commitBuilder.setMessage(commitMessage);
-    commitBuilder.setAuthor(personIdent);
-    commitBuilder.setCommitter(personIdent);
+    commitBuilder.setMessage(message);
+    commitBuilder.setAuthor(author);
+    commitBuilder.setCommitter(committer);
     commitBuilder.setTreeId(treeId);
     for (ObjectId parent : parents) {
       commitBuilder.addParentId(parent);
     }
-    ObjectId commitId = inserter.insert(commitBuilder);
-    inserter.flush();
-    return commitId;
+    return inserter.insert(commitBuilder);
   }
+
+  /**
+   * Directories sort as if their name had a trailing {@code /} appended (byte value 0x2F), which
+   * places them after files whose names start with the same prefix followed by any byte {@literal <}
+   * 0x2F (e.g. {@code '.'} = 0x2E). This matches the order git expects inside a tree object.
+   */
+  private static final Comparator<Path> GIT_TREE_ORDER = (p1, p2) -> {
+    String n1 = p1.getFileName().toString();
+    String n2 = p2.getFileName().toString();
+    String k1 = Files.isDirectory(p1, LinkOption.NOFOLLOW_LINKS) ? n1 + "/" : n1;
+    String k2 = Files.isDirectory(p2, LinkOption.NOFOLLOW_LINKS) ? n2 + "/" : n2;
+    return k1.compareTo(k2);
+  };
 
   private static ObjectId insertTree(ObjectInserter inserter, Path directory) throws IOException {
     checkArgument(Files.isDirectory(directory));
     TreeFormatter treeFormatter = new TreeFormatter();
-    try (Stream<Path> content = Files.list(directory)) {
+    try (Stream<Path> content = Files.list(directory).sorted(GIT_TREE_ORDER)) {
       for (Path relEntry : (Iterable<Path>) content::iterator) {
         String entryName = relEntry.getFileName().toString();
         Path entry = relEntry.toAbsolutePath();
@@ -261,37 +273,36 @@ public class FactoGitNew {
    * set to the last node visited in breadth-first order from all roots.
    */
   public DfsRepository repo() throws IOException {
-    Graph<Path> graph = dag;
-    TFunction<Path, IdStamp, IOException> ourCommitters = committers.summon(graph);
-    TFunction<Path, String, IOException> ourMessages = commitMessages.summon(graph);
+    TFunction<Path, IdStamp, IOException> ourCommitters = committers.summon(dag);
+    TFunction<Path, String, IOException> ourMessages = commitMessages.summon(dag);
 
     InMemoryRepository repository = new InMemoryRepository(new DfsRepositoryDescription(name));
     repository.create(true);
 
-    ImmutableSet<Path> topoOrder = GraphUtils.topologicallySortedNodes(graph);
-    BiMap<Path, ObjectId> commitsMap = HashBiMap.create(graph.nodes().size());
+    ImmutableSet<Path> topoOrder = GraphUtils.topologicallySortedNodes(dag);
+    BiMap<Path, ObjectId> commitsMap = HashBiMap.create(dag.nodes().size());
 
     try (ObjectInserter inserter = repository.getObjectDatabase().newInserter()) {
       for (Path source : topoOrder) {
-        Set<Path> parentPaths = graph.predecessors(source);
-        ImmutableList<ObjectId> parents = parentPaths.stream()
+        ImmutableList<ObjectId> parents = dag.predecessors(source).stream()
             .map(commitsMap::get)
-            .collect(ImmutableSet.toImmutableSet())
-            .asList();
-        ObjectId oId = insertCommit(inserter, personIdent(ourCommitters.apply(source)),
-            source, parents, ourMessages.apply(source));
+            .collect(ImmutableList.toImmutableList());
+        PersonIdent ident = personIdent(ourCommitters.apply(source));
+        ObjectId oId = insertCommit(inserter, ident, ident,
+            insertTree(inserter, source), parents, ourMessages.apply(source));
         commitsMap.put(source, oId);
         LOGGER.debug("Created commit for {}: {}.", source, oId);
       }
+      inserter.flush();
     }
     ImmutableBiMap<Path, ObjectId> commits = ImmutableBiMap.copyOf(commitsMap);
 
-    if (!graph.nodes().isEmpty()) {
-      ImmutableSet<Path> roots = graph.nodes().stream()
-          .filter(n -> graph.inDegree(n) == 0)
+    if (!dag.nodes().isEmpty()) {
+      ImmutableSet<Path> roots = dag.nodes().stream()
+          .filter(n -> dag.inDegree(n) == 0)
           .collect(ImmutableSet.toImmutableSet());
       Path bfsLast = null;
-      for (Path node : Traverser.<Path>forGraph(graph::successors).breadthFirst(roots)) {
+      for (Path node : Traverser.<Path>forGraph(dag::successors).breadthFirst(roots)) {
         bfsLast = node;
       }
       setMainAndHead(repository, commits.get(bfsLast));

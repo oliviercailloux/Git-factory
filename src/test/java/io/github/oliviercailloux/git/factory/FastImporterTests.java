@@ -25,8 +25,7 @@ import org.junit.jupiter.api.Test;
 public class FastImporterTests {
   @Test
   void testBasic() throws Exception {
-    try (DfsRepository repo = FastImporter.create()
-        .importRepository(Resourcer.charSource("basic.fast-export"));
+    try (DfsRepository repo = FastImporter.importRepository(Resourcer.charSource("basic.fast-export"));
         Git git = Git.wrap(repo)) {
       final RevCommit commit = Iterables.getOnlyElement(git.log().call());
       assertEquals(0, commit.getParentCount());
@@ -59,8 +58,7 @@ public class FastImporterTests {
 
   @Test
   void testTwoCommits() throws Exception {
-    try (DfsRepository repo = FastImporter.create()
-        .importRepository(Resourcer.charSource("two-commits.fast-export"));
+    try (DfsRepository repo = FastImporter.importRepository(Resourcer.charSource("two-commits.fast-export"));
         Git git = Git.wrap(repo)) {
       final ImmutableList<RevCommit> commits = ImmutableList.copyOf(git.log().call());
       assertEquals(2, commits.size());
@@ -108,8 +106,7 @@ public class FastImporterTests {
 
   @Test
   void testSubdirTimezone() throws Exception {
-    try (DfsRepository repo = FastImporter.create()
-        .importRepository(Resourcer.charSource("subdir-timezone.fast-export"));
+    try (DfsRepository repo = FastImporter.importRepository(Resourcer.charSource("subdir-timezone.fast-export"));
         Git git = Git.wrap(repo)) {
       final RevCommit commit = Iterables.getOnlyElement(git.log().call());
       assertEquals(ZoneOffset.ofHours(2), commit.getAuthorIdent().getZoneOffset());
@@ -138,8 +135,7 @@ public class FastImporterTests {
 
   @Test
   void testExecutableMode() throws Exception {
-    try (DfsRepository repo = FastImporter.create()
-        .importRepository(Resourcer.charSource("executable-mode.fast-export"));
+    try (DfsRepository repo = FastImporter.importRepository(Resourcer.charSource("executable-mode.fast-export"));
         Git git = Git.wrap(repo)) {
       final RevCommit commit = Iterables.getOnlyElement(git.log().call());
 
@@ -159,8 +155,7 @@ public class FastImporterTests {
 
   @Test
   void testTwoBranches() throws Exception {
-    try (DfsRepository repo = FastImporter.create()
-        .importRepository(Resourcer.charSource("two-branches.fast-export"))) {
+    try (DfsRepository repo = FastImporter.importRepository(Resourcer.charSource("two-branches.fast-export"))) {
       final ObjectId mainId = repo.resolve("refs/heads/main");
       final ObjectId featureId = repo.resolve("refs/heads/feature");
       assertNotNull(mainId);
@@ -183,8 +178,7 @@ public class FastImporterTests {
 
   @Test
   void testMergeCommit() throws Exception {
-    try (DfsRepository repo = FastImporter.create()
-        .importRepository(Resourcer.charSource("merge-commit.fast-export"));
+    try (DfsRepository repo = FastImporter.importRepository(Resourcer.charSource("merge-commit.fast-export"));
         Git git = Git.wrap(repo)) {
       final ObjectId mainId = repo.resolve("refs/heads/main");
       final ObjectId featureId = repo.resolve("refs/heads/feature");
@@ -217,8 +211,7 @@ public class FastImporterTests {
 
   @Test
   void testDistinctCommitter() throws Exception {
-    try (DfsRepository repo = FastImporter.create()
-        .importRepository(Resourcer.charSource("distinct-committer.fast-export"));
+    try (DfsRepository repo = FastImporter.importRepository(Resourcer.charSource("distinct-committer.fast-export"));
         Git git = Git.wrap(repo)) {
       final RevCommit commit = Iterables.getOnlyElement(git.log().call());
       final PersonIdent author = commit.getAuthorIdent();
@@ -234,8 +227,7 @@ public class FastImporterTests {
 
   @Test
   void testMultilevelDir() throws Exception {
-    try (DfsRepository repo = FastImporter.create()
-        .importRepository(Resourcer.charSource("multilevel-dir.fast-export"));
+    try (DfsRepository repo = FastImporter.importRepository(Resourcer.charSource("multilevel-dir.fast-export"));
         Git git = Git.wrap(repo)) {
       final RevCommit commit = Iterables.getOnlyElement(git.log().call());
       try (TreeWalk treeWalk = new TreeWalk(repo)) {
@@ -253,8 +245,7 @@ public class FastImporterTests {
 
   @Test
   void testEncoding() throws Exception {
-    try (DfsRepository repo = FastImporter.create()
-        .importRepository(Resourcer.charSource("encoding.fast-export"));
+    try (DfsRepository repo = FastImporter.importRepository(Resourcer.charSource("encoding.fast-export"));
         Git git = Git.wrap(repo)) {
       final RevCommit commit = Iterables.getOnlyElement(git.log().call());
       assertEquals("Encoded commit\n", commit.getFullMessage());
@@ -264,8 +255,7 @@ public class FastImporterTests {
 
   @Test
   void testSymlink() throws Exception {
-    try (DfsRepository repo = FastImporter.create()
-        .importRepository(Resourcer.charSource("symlink.fast-export"));
+    try (DfsRepository repo = FastImporter.importRepository(Resourcer.charSource("symlink.fast-export"));
         Git git = Git.wrap(repo)) {
       final RevCommit commit = Iterables.getOnlyElement(git.log().call());
       try (TreeWalk treeWalk = new TreeWalk(repo)) {
@@ -286,8 +276,7 @@ public class FastImporterTests {
 
   @Test
   void testAnnotatedTag() throws Exception {
-    try (DfsRepository repo = FastImporter.create()
-        .importRepository(Resourcer.charSource("annotated-tag.fast-export"))) {
+    try (DfsRepository repo = FastImporter.importRepository(Resourcer.charSource("annotated-tag.fast-export"))) {
       final ObjectId tagRefId = repo.resolve("refs/tags/v1.0");
       assertNotNull(tagRefId);
       try (RevWalk rw = new RevWalk(repo)) {
@@ -304,8 +293,7 @@ public class FastImporterTests {
 
   @Test
   void testGitlink() throws Exception {
-    try (DfsRepository repo = FastImporter.create()
-        .importRepository(Resourcer.charSource("gitlink.fast-export"));
+    try (DfsRepository repo = FastImporter.importRepository(Resourcer.charSource("gitlink.fast-export"));
         Git git = Git.wrap(repo)) {
       final RevCommit commit = Iterables.getOnlyElement(git.log().call());
       try (TreeWalk treeWalk = new TreeWalk(repo)) {
@@ -336,8 +324,7 @@ public class FastImporterTests {
 
   @Test
   void testUnicode() throws Exception {
-    try (DfsRepository repo = FastImporter.create()
-        .importRepository(Resourcer.byteSource("unicode.fast-export"));
+    try (DfsRepository repo = FastImporter.importRepository(Resourcer.byteSource("unicode.fast-export"));
         Git git = Git.wrap(repo)) {
       final RevCommit commit = Iterables.getOnlyElement(git.log().call());
       try (TreeWalk treeWalk = new TreeWalk(repo)) {

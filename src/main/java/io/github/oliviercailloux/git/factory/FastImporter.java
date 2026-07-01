@@ -40,17 +40,13 @@ public class FastImporter {
   @SuppressWarnings("unused")
   private static final Logger LOGGER = LoggerFactory.getLogger(FastImporter.class);
 
-  public static FastImporter create() {
-    return new FastImporter();
-  }
-
   private FastImporter() {}
 
-  public DfsRepository importRepository(CharSource source) throws IOException {
+  public static DfsRepository importRepository(CharSource source) throws IOException {
     return importRepository(ByteSource.wrap(source.read().getBytes(StandardCharsets.UTF_8)));
   }
 
-  public DfsRepository importRepository(ByteSource source) throws IOException {
+  public static DfsRepository importRepository(ByteSource source) throws IOException {
     final InMemoryRepository repository =
         new InMemoryRepository(new DfsRepositoryDescription(""));
     repository.create(true);
@@ -129,7 +125,8 @@ public class FastImporter {
     }
 
     final ObjectId treeId = insertTree(inserter, files);
-    final ObjectId commitId = insertCommit(inserter, author, committer, treeId, parents, message);
+    final ObjectId commitId = FactoGitNew.insertCommit(inserter, author, committer, treeId, parents, message);
+    inserter.flush();
     marks.put(mark, commitId);
     LOGGER.debug("Inserted commit mark :{} → {}.", mark, commitId);
 
@@ -231,56 +228,42 @@ public class FastImporter {
         ZoneOffset.of(timeParts[1]));
   }
 
+  private sealed interface TreeNode permits FileNode, DirNode {}
+
+  private record FileNode(MEntry entry) implements TreeNode {}
+
+  private record DirNode(LinkedHashMap<String, TreeNode> children) implements TreeNode {}
+
   private static ObjectId insertTree(ObjectInserter inserter, Map<String, MEntry> files)
       throws IOException {
-    final Map<String, Object> tree = new LinkedHashMap<>();
+    final DirNode root = new DirNode(new LinkedHashMap<>());
     for (Map.Entry<String, MEntry> entry : files.entrySet()) {
-      putEntry(tree, entry.getKey(), entry.getValue());
+      putEntry(root, entry.getKey(), entry.getValue());
     }
-    return insertTreeNode(inserter, tree);
+    return insertDirNode(inserter, root);
   }
 
-  @SuppressWarnings("unchecked")
-  private static void putEntry(Map<String, Object> tree, String path, MEntry entry) {
+  private static void putEntry(DirNode dir, String path, MEntry entry) {
     final int slash = path.indexOf('/');
     if (slash < 0) {
-      tree.put(path, entry);
+      dir.children().put(path, new FileNode(entry));
     } else {
-      final Map<String, Object> subtree = (Map<String, Object>) tree.computeIfAbsent(
-          path.substring(0, slash), k -> new LinkedHashMap<>());
+      final DirNode subtree = (DirNode) dir.children().computeIfAbsent(
+          path.substring(0, slash), k -> new DirNode(new LinkedHashMap<>()));
       putEntry(subtree, path.substring(slash + 1), entry);
     }
   }
 
-  @SuppressWarnings("unchecked")
-  private static ObjectId insertTreeNode(ObjectInserter inserter, Map<String, Object> tree)
-      throws IOException {
+  private static ObjectId insertDirNode(ObjectInserter inserter, DirNode dir) throws IOException {
     final TreeFormatter formatter = new TreeFormatter();
-    for (Map.Entry<String, Object> entry : tree.entrySet()) {
-      if (entry.getValue() instanceof MEntry me) {
-        formatter.append(entry.getKey(), me.mode(), me.oid());
-      } else {
-        formatter.append(entry.getKey(), FileMode.TREE,
-            insertTreeNode(inserter, (Map<String, Object>) entry.getValue()));
+    for (Map.Entry<String, TreeNode> entry : dir.children().entrySet()) {
+      switch (entry.getValue()) {
+        case FileNode fn -> formatter.append(entry.getKey(), fn.entry().mode(), fn.entry().oid());
+        case DirNode dn ->
+            formatter.append(entry.getKey(), FileMode.TREE, insertDirNode(inserter, dn));
       }
     }
     return inserter.insert(formatter);
-  }
-
-  private static ObjectId insertCommit(ObjectInserter inserter, PersonIdent author,
-      PersonIdent committer, ObjectId treeId, List<ObjectId> parents, String message)
-      throws IOException {
-    final CommitBuilder commitBuilder = new CommitBuilder();
-    commitBuilder.setMessage(message);
-    commitBuilder.setAuthor(author);
-    commitBuilder.setCommitter(committer);
-    commitBuilder.setTreeId(treeId);
-    for (ObjectId parent : parents) {
-      commitBuilder.addParentId(parent);
-    }
-    final ObjectId commitId = inserter.insert(commitBuilder);
-    inserter.flush();
-    return commitId;
   }
 
   private static void setRef(Repository repository, String ref, ObjectId newId)
