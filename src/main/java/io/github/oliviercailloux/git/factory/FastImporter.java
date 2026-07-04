@@ -52,6 +52,7 @@ public class FastImporter {
     repository.create(true);
 
     final Map<Integer, ObjectId> marks = new HashMap<>();
+    final Map<Integer, Map<String, MEntry>> fileMaps = new HashMap<>();
 
     try (InputStream stream = new BufferedInputStream(source.openStream());
         ObjectInserter inserter = repository.getObjectDatabase().newInserter()) {
@@ -66,7 +67,7 @@ public class FastImporter {
           // skip
         } else if (line.startsWith("commit ")) {
           final String ref = line.substring("commit ".length());
-          readCommit(stream, inserter, marks, repository, ref);
+          readCommit(stream, inserter, marks, fileMaps, repository, ref);
         } else if (line.startsWith("tag ")) {
           final String tagName = line.substring("tag ".length());
           readTag(stream, inserter, marks, repository, tagName);
@@ -88,7 +89,8 @@ public class FastImporter {
   }
 
   private static void readCommit(InputStream stream, ObjectInserter inserter,
-      Map<Integer, ObjectId> marks, InMemoryRepository repository, String ref) throws IOException {
+      Map<Integer, ObjectId> marks, Map<Integer, Map<String, MEntry>> fileMaps,
+      InMemoryRepository repository, String ref) throws IOException {
     final int mark = readMark(stream);
     final PersonIdent author = readIdent(stream, "author");
     final PersonIdent committer = readIdent(stream, "committer");
@@ -102,18 +104,30 @@ public class FastImporter {
 
     line = readLine(stream);
     final List<ObjectId> parents = new ArrayList<>();
+    Integer firstParentMark = null;
     if (line != null && line.startsWith("from :")) {
-      parents.add(marks.get(Integer.parseInt(line.substring("from :".length()))));
+      firstParentMark = Integer.parseInt(line.substring("from :".length()));
+      parents.add(marks.get(firstParentMark));
       line = readLine(stream);
     }
     while (line != null && line.startsWith("merge :")) {
       parents.add(marks.get(Integer.parseInt(line.substring("merge :".length()))));
       line = readLine(stream);
     }
-    verify("deleteall".equals(line), "Expected deleteall, got: %s", line);
 
     final Map<String, MEntry> files = new LinkedHashMap<>();
-    while ((line = readLine(stream)) != null && !line.isEmpty()) {
+    if ("deleteall".equals(line)) {
+      line = readLine(stream);
+    } else {
+      if (firstParentMark != null) {
+        final Map<String, MEntry> parentFiles = fileMaps.get(firstParentMark);
+        if (parentFiles != null) {
+          files.putAll(parentFiles);
+        }
+      }
+    }
+
+    while (line != null && !line.isEmpty()) {
       if (line.startsWith("M ")) {
         final String[] parts = line.split(" ", 4);
         final FileMode mode = FileMode.fromBits(Integer.parseInt(parts[1], 8));
@@ -121,13 +135,23 @@ public class FastImporter {
             ? marks.get(Integer.parseInt(parts[2].substring(1)))
             : ObjectId.fromString(parts[2]);
         files.put(parts[3], new MEntry(mode, oid));
+      } else if (line.startsWith("D ")) {
+        files.remove(line.substring(2));
+      } else if (line.startsWith("R ")) {
+        final String[] parts = line.split(" ", 3);
+        files.put(parts[2], files.remove(parts[1]));
+      } else if (line.startsWith("C ")) {
+        final String[] parts = line.split(" ", 3);
+        files.put(parts[2], files.get(parts[1]));
       }
+      line = readLine(stream);
     }
 
     final ObjectId treeId = insertTree(inserter, files);
     final ObjectId commitId = FactoGitNew.insertCommit(inserter, author, committer, treeId, parents, message);
     inserter.flush();
     marks.put(mark, commitId);
+    fileMaps.put(mark, files);
     LOGGER.debug("Inserted commit mark :{} → {}.", mark, commitId);
 
     setRef(repository, ref, commitId);

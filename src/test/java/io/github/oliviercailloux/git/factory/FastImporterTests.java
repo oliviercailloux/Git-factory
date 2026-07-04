@@ -339,4 +339,81 @@ public class FastImporterTests {
       }
     }
   }
+
+  @Test
+  void testPatchModifyDelete() throws Exception {
+    try (DfsRepository repo =
+        FastImporter.importRepository(Resourcer.charSource("patch-modify-delete.fast-export"));
+        Git git = Git.wrap(repo)) {
+      final ImmutableList<RevCommit> commits = ImmutableList.copyOf(git.log().call());
+      assertEquals(2, commits.size());
+
+      final RevCommit second = commits.get(0);
+      final RevCommit first = commits.get(1);
+
+      assertEquals("First commit\n", first.getFullMessage());
+      assertEquals(0, first.getParentCount());
+
+      assertEquals("Second commit\n", second.getFullMessage());
+      assertEquals(1, second.getParentCount());
+      assertEquals(first.getId(), second.getParent(0).getId());
+
+      try (TreeWalk treeWalk = new TreeWalk(repo)) {
+        treeWalk.addTree(first.getTree());
+        treeWalk.setRecursive(true);
+        assertTrue(treeWalk.next());
+        assertEquals("file1.txt", treeWalk.getPathString());
+        assertEquals("Hello world\n",
+            new String(repo.open(treeWalk.getObjectId(0)).getBytes(), StandardCharsets.UTF_8));
+        assertTrue(treeWalk.next());
+        assertEquals("keep.txt", treeWalk.getPathString());
+        assertEquals("Keep this\n",
+            new String(repo.open(treeWalk.getObjectId(0)).getBytes(), StandardCharsets.UTF_8));
+        assertFalse(treeWalk.next());
+      }
+
+      try (TreeWalk treeWalk = new TreeWalk(repo)) {
+        treeWalk.addTree(second.getTree());
+        treeWalk.setRecursive(true);
+        assertTrue(treeWalk.next());
+        assertEquals("file1.txt", treeWalk.getPathString());
+        assertEquals("Hello again\n",
+            new String(repo.open(treeWalk.getObjectId(0)).getBytes(), StandardCharsets.UTF_8));
+        assertFalse(treeWalk.next()); // keep.txt deleted
+      }
+    }
+  }
+
+  @Test
+  void testPatchRename() throws Exception {
+    try (DfsRepository repo =
+        FastImporter.importRepository(Resourcer.charSource("patch-rename.fast-export"));
+        Git git = Git.wrap(repo)) {
+      final ImmutableList<RevCommit> commits = ImmutableList.copyOf(git.log().call());
+      assertEquals(2, commits.size());
+
+      final RevCommit second = commits.get(0);
+      final RevCommit first = commits.get(1);
+
+      try (TreeWalk treeWalk = new TreeWalk(repo)) {
+        treeWalk.addTree(first.getTree());
+        treeWalk.setRecursive(true);
+        assertTrue(treeWalk.next());
+        assertEquals("old.txt", treeWalk.getPathString());
+        final byte[] content = repo.open(treeWalk.getObjectId(0)).getBytes();
+        assertEquals("Hello world\n", new String(content, StandardCharsets.UTF_8));
+        assertFalse(treeWalk.next());
+      }
+
+      try (TreeWalk treeWalk = new TreeWalk(repo)) {
+        treeWalk.addTree(second.getTree());
+        treeWalk.setRecursive(true);
+        assertTrue(treeWalk.next());
+        assertEquals("new.txt", treeWalk.getPathString()); // renamed
+        assertEquals("Hello world\n",
+            new String(repo.open(treeWalk.getObjectId(0)).getBytes(), StandardCharsets.UTF_8));
+        assertFalse(treeWalk.next()); // old.txt gone
+      }
+    }
+  }
 }

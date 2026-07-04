@@ -1,0 +1,35 @@
+blob
+mark :1
+data 12
+Hello world
+
+blob
+mark :2
+data 12
+Hello again
+
+blob
+mark :3
+data 10
+Keep this
+
+commit refs/heads/main
+mark :4
+author Me <me@example.com> 999985600 +0000
+committer Me <me@example.com> 999985600 +0000
+data 13
+First commit
+deleteall
+M 100644 :1 file1.txt
+M 100644 :3 keep.txt
+
+commit refs/heads/main
+mark :5
+author Me <me@example.com> 999989200 +0000
+committer Me <me@example.com> 999989200 +0000
+data 14
+Second commit
+from :4
+M 100644 :2 file1.txt
+D keep.txt
+

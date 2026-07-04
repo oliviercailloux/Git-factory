@@ -66,6 +66,7 @@ import org.slf4j.LoggerFactory;
  * also returns a mapping path ⇔ commits (is this useful?); and a wrapper one that admits constant
  * dags.
  */
+@Deprecated
 public class FactoGit {
   @SuppressWarnings("unused")
   private static final Logger LOGGER = LoggerFactory.getLogger(FactoGit.class);
