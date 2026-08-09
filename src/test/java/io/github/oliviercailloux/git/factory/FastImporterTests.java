@@ -418,6 +418,26 @@ public class FastImporterTests {
   }
 
   @Test
+  void testPatchRenameQuoted() throws Exception {
+    try (DfsRepository repo =
+        FastImporter.importRepository(Resourcer.charSource("patch-rename-quoted.fast-export"));
+        Git git = Git.wrap(repo)) {
+      final ImmutableList<RevCommit> commits = ImmutableList.copyOf(git.log().call());
+      final RevCommit second = commits.get(0);
+
+      try (TreeWalk treeWalk = new TreeWalk(repo)) {
+        treeWalk.addTree(second.getTree());
+        treeWalk.setRecursive(true);
+        assertTrue(treeWalk.next());
+        assertEquals("new file.txt", treeWalk.getPathString());
+        assertEquals("Hello world\n",
+            new String(repo.open(treeWalk.getObjectId(0)).getBytes(), StandardCharsets.UTF_8));
+        assertFalse(treeWalk.next());
+      }
+    }
+  }
+
+  @Test
   void testQuotedPathWithSpace() throws Exception {
     try (DfsRepository repo =
         FastImporter.importRepository(Resourcer.charSource("quoted-path.fast-export"));

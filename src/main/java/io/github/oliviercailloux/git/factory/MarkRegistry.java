@@ -92,15 +92,20 @@ class MarkRegistry {
         final ObjectId oid = parts[2].startsWith(":")
             ? marks.get(Integer.parseInt(parts[2].substring(1))).oid()
             : ObjectId.fromString(parts[2]);
-        files.put(parts[3], new MEntry(mode, oid));
+        files.put(parsePath(parts[3]), new MEntry(mode, oid));
       } else if (line.startsWith("D ")) {
-        files.remove(line.substring(2));
-      } else if (line.startsWith("R ")) {
-        final String[] parts = line.split(" ", 3);
-        files.put(parts[2], files.remove(parts[1]));
-      } else if (line.startsWith("C ")) {
-        final String[] parts = line.split(" ", 3);
-        files.put(parts[2], files.get(parts[1]));
+        files.remove(parsePath(line.substring("D ".length())));
+      } else if (line.startsWith("R ") || line.startsWith("C ")) {
+        final int sourceEnd = pathTokenEnd(line, 2);
+        final String source = parsePath(line.substring(2, sourceEnd));
+        checkState(sourceEnd < line.length() && line.charAt(sourceEnd) == ' ',
+            "Expected source path followed by a space, got: %s", line);
+        final String dest = parsePath(line.substring(sourceEnd + 1));
+        if (line.startsWith("R ")) {
+          files.put(dest, files.remove(source));
+        } else {
+          files.put(dest, files.get(source));
+        }
       }
       line = readLine(stream);
     }
@@ -208,5 +213,69 @@ class MarkRegistry {
     final String[] timeParts = rest.substring(gt + 2).split(" ");
     return new PersonIdent(name, email, Instant.ofEpochSecond(Long.parseLong(timeParts[0])),
         ZoneOffset.of(timeParts[1]));
+  }
+
+  /**
+   * Returns the index right after the path token starting at {@code start}: past the closing
+   * quote if the token is quoted, otherwise the index of the next space (or end of string).
+   * Unquoted tokens cannot contain a space, per the fast-import format.
+   */
+  private static int pathTokenEnd(String s, int start) {
+    if (s.charAt(start) == '"') {
+      int i = start + 1;
+      while (i < s.length() && s.charAt(i) != '"') {
+        if (s.charAt(i) == '\\') {
+          i++;
+        }
+        i++;
+      }
+      checkState(i < s.length(), "Unterminated quoted path: %s", s);
+      return i + 1;
+    }
+    final int sp = s.indexOf(' ', start);
+    return sp < 0 ? s.length() : sp;
+  }
+
+  private static String parsePath(String token) {
+    return token.startsWith("\"") ? unquotePath(token) : token;
+  }
+
+  /** Unquotes a C-style quoted fast-import path, including its surrounding double quotes. */
+  private static String unquotePath(String quoted) {
+    checkState(quoted.length() >= 2 && quoted.charAt(quoted.length() - 1) == '"',
+        "Malformed quoted path: %s", quoted);
+    final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+    final String inner = quoted.substring(1, quoted.length() - 1);
+    int i = 0;
+    while (i < inner.length()) {
+      final char c = inner.charAt(i);
+      if (c != '\\') {
+        bytes.write(c);
+        i++;
+        continue;
+      }
+      i++;
+      checkState(i < inner.length(), "Truncated escape sequence in path: %s", quoted);
+      final char e = inner.charAt(i);
+      switch (e) {
+        case '\\' -> bytes.write('\\');
+        case '"' -> bytes.write('"');
+        case 'n' -> bytes.write('\n');
+        case 'a' -> bytes.write(7);
+        case 'b' -> bytes.write('\b');
+        case 'f' -> bytes.write('\f');
+        case 'r' -> bytes.write('\r');
+        case 't' -> bytes.write('\t');
+        case 'v' -> bytes.write(11);
+        default -> {
+          checkState(Character.isDigit(e) && i + 2 < inner.length(),
+              "Unknown escape sequence '\\%s' in path: %s", e, quoted);
+          bytes.write(Integer.parseInt(inner.substring(i, i + 3), 8));
+          i += 2;
+        }
+      }
+      i++;
+    }
+    return bytes.toString(StandardCharsets.UTF_8);
   }
 }
