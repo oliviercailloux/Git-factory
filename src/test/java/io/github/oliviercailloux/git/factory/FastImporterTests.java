@@ -419,6 +419,43 @@ public class FastImporterTests {
   }
 
   @Test
+  void testTreeOrder() throws Exception {
+    try (DfsRepository repo = FastImporter.importRepository(Resourcer.charSource("tree-order.fast-export"));
+        Git git = Git.wrap(repo)) {
+      final RevCommit second = git.log().call().iterator().next();
+      try (TreeWalk treeWalk = new TreeWalk(repo)) {
+        treeWalk.addTree(second.getTree());
+        treeWalk.setRecursive(true);
+        assertTrue(treeWalk.next());
+        assertEquals("extra.txt", treeWalk.getPathString());
+        assertTrue(treeWalk.next());
+        assertEquals("file.txt", treeWalk.getPathString());
+        assertFalse(treeWalk.next());
+      }
+    }
+  }
+
+  @Test
+  void testTreeOrderDirectoryVersusFile() throws Exception {
+    try (DfsRepository repo =
+        FastImporter.importRepository(Resourcer.charSource("tree-order-dir-vs-file.fast-export"));
+        Git git = Git.wrap(repo)) {
+      final RevCommit commit = Iterables.getOnlyElement(git.log().call());
+      try (TreeWalk treeWalk = new TreeWalk(repo)) {
+        treeWalk.addTree(commit.getTree());
+        treeWalk.setRecursive(false);
+        assertTrue(treeWalk.next());
+        assertEquals("lib-old.txt", treeWalk.getNameString());
+        assertEquals(FileMode.REGULAR_FILE, treeWalk.getFileMode(0));
+        assertTrue(treeWalk.next());
+        assertEquals("lib", treeWalk.getNameString());
+        assertEquals(FileMode.TREE, treeWalk.getFileMode(0));
+        assertFalse(treeWalk.next());
+      }
+    }
+  }
+
+  @Test
   void testFromBranchName() throws Exception {
     try (DfsRepository repo =
         FastImporter.importRepository(Resourcer.charSource("from-branch-name.fast-export"));

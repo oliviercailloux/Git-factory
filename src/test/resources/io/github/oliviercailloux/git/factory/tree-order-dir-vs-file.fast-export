@@ -1,0 +1,19 @@
+blob
+mark :1
+data 4
+Old
+
+blob
+mark :2
+data 6
+Inner
+
+commit refs/heads/main
+mark :3
+author Me <me@example.com> 999985600 +0000
+committer Me <me@example.com> 999985600 +0000
+data 12
+Dir vs file
+deleteall
+M 100644 :2 lib/inner.txt
+M 100644 :1 lib-old.txt

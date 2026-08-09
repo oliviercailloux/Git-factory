@@ -8,7 +8,9 @@ import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.eclipse.jgit.internal.storage.dfs.DfsRepository;
 import org.eclipse.jgit.internal.storage.dfs.DfsRepositoryDescription;
@@ -94,9 +96,22 @@ public class FastImporter {
     return new DirNode(newChildren);
   }
 
+  /**
+   * Directories sort as if their name had a trailing {@code /} appended (byte value 0x2F), which
+   * places them after sibling entries whose names start with the same prefix followed by any byte
+   * {@literal <} 0x2F (e.g. {@code '-'} = 0x2D). This matches the order git expects inside a tree
+   * object.
+   */
+  private static final Comparator<Map.Entry<String, TreeNode>> GIT_TREE_ORDER =
+      Comparator.comparing(entry -> entry.getValue() instanceof DirNode
+          ? entry.getKey() + "/"
+          : entry.getKey());
+
   private static ObjectId insertDirNode(ObjectInserter inserter, DirNode dir) throws IOException {
     final TreeFormatter formatter = new TreeFormatter();
-    for (Map.Entry<String, TreeNode> entry : dir.children().entrySet()) {
+    final List<Map.Entry<String, TreeNode>> sorted =
+        dir.children().entrySet().stream().sorted(GIT_TREE_ORDER).toList();
+    for (Map.Entry<String, TreeNode> entry : sorted) {
       switch (entry.getValue()) {
         case FileNode fn -> formatter.append(entry.getKey(), fn.entry().mode(), fn.entry().oid());
         case DirNode dn ->
