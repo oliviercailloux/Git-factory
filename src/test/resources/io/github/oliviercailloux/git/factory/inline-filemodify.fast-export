@@ -1,0 +1,9 @@
+commit refs/heads/main
+mark :1
+author Me <me@example.com> 999985600 +0000
+committer Me <me@example.com> 999985600 +0000
+data 13
+First commit
+M 100644 inline file.txt
+data 12
+Hello world

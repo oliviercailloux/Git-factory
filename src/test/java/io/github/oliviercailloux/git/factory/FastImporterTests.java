@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.google.common.collect.ImmutableList;
@@ -539,5 +540,41 @@ public class FastImporterTests {
         assertFalse(treeWalk.next());
       }
     }
+  }
+
+  @Test
+  void testUnrecognizedCommandFailsFast() {
+    assertThrows(RuntimeException.class, () -> FastImporter
+        .importRepository(Resourcer.charSource("unrecognized-command.fast-export")));
+  }
+
+  @Test
+  void testAliasCommandFailsFast() {
+    assertThrows(RuntimeException.class,
+        () -> FastImporter.importRepository(Resourcer.charSource("alias-command.fast-export")));
+  }
+
+  @Test
+  void testNotemodifyFailsFast() {
+    assertThrows(RuntimeException.class,
+        () -> FastImporter.importRepository(Resourcer.charSource("notemodify.fast-export")));
+  }
+
+  @Test
+  void testInlineFilemodifyFailsFast() {
+    assertThrows(RuntimeException.class, () -> FastImporter
+        .importRepository(Resourcer.charSource("inline-filemodify.fast-export")));
+  }
+
+  @Test
+  void testShorthandModeFailsFast() {
+    assertThrows(RuntimeException.class,
+        () -> FastImporter.importRepository(Resourcer.charSource("shorthand-mode.fast-export")));
+  }
+
+  @Test
+  void testDelimitedDataFailsFast() {
+    assertThrows(RuntimeException.class,
+        () -> FastImporter.importRepository(Resourcer.charSource("delimited-data.fast-export")));
   }
 }

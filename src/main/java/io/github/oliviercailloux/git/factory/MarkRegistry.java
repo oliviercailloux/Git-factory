@@ -110,8 +110,7 @@ class MarkRegistry {
     if (line != null && line.startsWith("encoding ")) {
       line = readLine(stream);
     }
-    checkState(line != null && line.startsWith("data "), "Expected data line, got: %s", line);
-    final int msgLength = Integer.parseInt(line.substring("data ".length()));
+    final int msgLength = parseDataLength(line);
     final String message =
         new String(readExactlyBytes(stream, msgLength), StandardCharsets.UTF_8);
 
@@ -138,7 +137,9 @@ class MarkRegistry {
     while (line != null && !line.isEmpty()) {
       if (line.startsWith("M ")) {
         final String[] parts = line.split(" ", 4);
-        final FileMode mode = FileMode.fromBits(Integer.parseInt(parts[1], 8));
+        final FileMode mode = parseMode(parts[1]);
+        checkState(!"inline".equals(parts[2]), "Inline filemodify data is not supported: %s",
+            line);
         final ObjectId oid = parts[2].startsWith(":")
             ? marks.get(Integer.parseInt(parts[2].substring(1)))
             : ObjectId.fromString(parts[2]);
@@ -156,6 +157,8 @@ class MarkRegistry {
         } else {
           files.put(dest, files.get(source));
         }
+      } else if (!line.startsWith("#")) {
+        checkState(false, "Unsupported file-change command: %s", line);
       }
       line = readLine(stream);
     }
@@ -188,8 +191,7 @@ class MarkRegistry {
       line = readLine(stream);
     }
 
-    checkState(line != null && line.startsWith("data "), "Expected data in tag, got: %s", line);
-    final int msgLength = Integer.parseInt(line.substring("data ".length()));
+    final int msgLength = parseDataLength(line);
     final String message =
         new String(readExactlyBytes(stream, msgLength), StandardCharsets.UTF_8);
 
@@ -234,9 +236,15 @@ class MarkRegistry {
   }
 
   private static int readDataLength(InputStream stream) throws IOException {
-    final String line = readLine(stream);
+    return parseDataLength(readLine(stream));
+  }
+
+  private static int parseDataLength(String line) {
     checkState(line != null && line.startsWith("data "), "Expected data line, got: %s", line);
-    return Integer.parseInt(line.substring("data ".length()));
+    final String lengthOrDelimiter = line.substring("data ".length());
+    checkState(!lengthOrDelimiter.startsWith("<<"),
+        "Delimited data format is not supported, only the exact-byte-count form: %s", line);
+    return Integer.parseInt(lengthOrDelimiter);
   }
 
   private static byte[] readExactlyBytes(InputStream stream, int length) throws IOException {
@@ -250,6 +258,22 @@ class MarkRegistry {
     checkState(line != null && line.startsWith(prefix + " "), "Expected %s line, got: %s", prefix,
         line);
     return parseIdent(line.substring(prefix.length() + 1));
+  }
+
+  /**
+   * Parses a fast-import file mode: only the full octal forms git actually recognizes for a tree
+   * entry ({@code 100644}, {@code 100755}, {@code 120000}, {@code 160000}, {@code 040000}) are
+   * accepted; shorthand forms (e.g. {@code 644}) are rejected, rather than silently producing a
+   * bogus mode.
+   */
+  private static FileMode parseMode(String bitsToken) {
+    final FileMode mode = FileMode.fromBits(Integer.parseInt(bitsToken, 8));
+    checkState(
+        mode == FileMode.REGULAR_FILE || mode == FileMode.EXECUTABLE_FILE
+            || mode == FileMode.SYMLINK || mode == FileMode.GITLINK || mode == FileMode.TREE,
+        "Unsupported or invalid file mode (expected one of 100644, 100755, 120000, 160000, 040000): %s",
+        bitsToken);
+    return mode;
   }
 
   private static PersonIdent parseIdent(String rest) {

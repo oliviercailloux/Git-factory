@@ -57,13 +57,26 @@ public class FastImporter {
         } else if (line.startsWith("tag ")) {
           registry.readTag(stream, inserter, repository, line.substring("tag ".length()));
           line = MarkRegistry.readLine(stream);
-        } else {
+        } else if (isHarmlessTopLevelCommand(line)) {
           line = MarkRegistry.readLine(stream);
+        } else {
+          throw new IllegalStateException("Unsupported fast-import command: " + line);
         }
       }
     }
 
     return repository;
+  }
+
+  /**
+   * Whether the given top-level line is a fast-import command this importer deliberately treats
+   * as a no-op, because it carries no information relevant to the resulting repository content:
+   * a stream comment, or one of {@code checkpoint}/{@code progress}/{@code done}/{@code feature}/
+   * {@code option}.
+   */
+  private static boolean isHarmlessTopLevelCommand(String line) {
+    return line.startsWith("#") || line.equals("checkpoint") || line.startsWith("progress ")
+        || line.equals("done") || line.startsWith("feature ") || line.startsWith("option ");
   }
 
   private static sealed interface TreeNode permits FileNode, DirNode {}
