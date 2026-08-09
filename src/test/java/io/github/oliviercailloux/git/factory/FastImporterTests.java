@@ -27,7 +27,7 @@ import org.junit.jupiter.api.Test;
 public class FastImporterTests {
   @Test
   void testBasic() throws Exception {
-    try (DfsRepository repo = FastImporter.importRepository(Resourcer.charSource("basic.fast-export"));
+    try (DfsRepository repo = FastImporter.importRepository(Resourcer.charSource("single-commit.fast-export"));
         Git git = Git.wrap(repo)) {
       final RevCommit commit = Iterables.getOnlyElement(git.log().call());
       assertEquals(0, commit.getParentCount());

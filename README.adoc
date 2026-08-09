@@ -1,6 +1,6 @@
 = Git factory
 
-Utilities for creating in-memory JGit repositories programmatically, primarily for use in tests. See link:CLAUDE.md[] for the architecture overview.
+Utilities for creating in-memory JGit repositories programmatically, primarily for use in tests.
 
 == `FastImporter`: fast-export format coverage
 
@@ -11,3 +11,6 @@ It does not cover the full `git fast-import` stream format. Constructs outside t
 * *Not supported, and rejected immediately:* `filemodify … inline` (git fast-export always uses a separate `blob` command instead), `notemodify`/git-notes (any `N` line), `alias`, shorthand file modes (`644` vs `100644`, rejected rather than silently turned into a bogus tree entry), the delimited `data <<EOF` form (only `data <length>` is supported, which is what `git fast-export` always emits), and any other top-level or file-change command this importer doesn't recognize (e.g. `ls`, `get-mark`, `cat-blob`) — previously these were silently dropped.
 * *Harmlessly ignored, by design:* `checkpoint`, `progress`, `done`, `feature`, `option`, and stream comments (`#…`) — these carry no information relevant to the resulting repository content, so ignoring them cannot produce a wrong result.
 * *`original-oid` and an omitted `author` line* aren't explicitly recognized, but already fail immediately with a "got: ..." message from the surrounding mandatory-field parsing (e.g. expecting `author`/`data` and finding something else) — correct in effect, though the message doesn't name the specific unsupported construct.
+
+== Built-in DAG fixtures
+`FastImporter.basic()`, `FastImporter.sub()`, and `FastImporter.linked()` build ready-made repositories from `.fast-export` files bundled under `src/main/resources/…`, reproducing the topologies of the deprecated `FactoGit#setBasicDag()`/`setSubDag()`/`setLinkedDag()` (single commit with two files; a 3-commit line ending in a subdirectory; a 4-commit line exercising relative/absolute/cyclic/dangling symlinks). Content matches the legacy DAGs commit-by-commit (verified by `LegacyDagFixturesTests`, modulo a trailing newline the legacy `Files.writeString` calls don't add); identities and timestamps are deterministic fixed values instead of the legacy empty-identity/current-time defaults, since those were incidental, not part of the fixture's shape.

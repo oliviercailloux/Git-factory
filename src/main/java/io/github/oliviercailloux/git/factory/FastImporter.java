@@ -4,6 +4,7 @@ import static com.google.common.base.Verify.verify;
 
 import com.google.common.io.ByteSource;
 import com.google.common.io.CharSource;
+import com.google.common.io.Resources;
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -25,7 +26,35 @@ import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.lib.TreeFormatter;
 
 public class FastImporter {
-  private FastImporter() {}
+  /**
+   * A single commit with two sibling files ({@code file1.txt}, {@code file2.txt}). Equivalent
+   * topology to the deprecated {@code FactoGit#setBasicDag()}.
+   */
+  public static DfsRepository basic() throws IOException {
+    return importRepository(bundled("basic.fast-export"));
+  }
+
+  /**
+   * A 3-commit line, growing the tree at each step and ending with a subdirectory
+   * ({@code dir/file.txt}). Equivalent topology to the deprecated {@code FactoGit#setSubDag()}.
+   */
+  public static DfsRepository sub() throws IOException {
+    return importRepository(bundled("sub.fast-export"));
+  }
+
+  /**
+   * A 4-commit line exercising symlinks: relative, absolute (dangling by construction), a
+   * subdirectory holding a link into its parent and a self-cycling link, and finally a dangling
+   * relative link after its target file is removed. Equivalent topology to the deprecated
+   * {@code FactoGit#setLinkedDag()}.
+   */
+  public static DfsRepository linked() throws IOException {
+    return importRepository(bundled("linked.fast-export"));
+  }
+
+  private static ByteSource bundled(String resourceName) {
+    return Resources.asByteSource(Resources.getResource(FastImporter.class, resourceName));
+  }
 
   public static DfsRepository importRepository(CharSource source) throws IOException {
     return importRepository(ByteSource.wrap(source.read().getBytes(StandardCharsets.UTF_8)));
@@ -145,4 +174,6 @@ public class FastImporter {
       verify(headResult == Result.FORCED || headResult == Result.NO_CHANGE, headResult.toString());
     }
   }
+
+  private FastImporter() {}
 }

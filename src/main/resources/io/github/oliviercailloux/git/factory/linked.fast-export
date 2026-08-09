@@ -1,0 +1,102 @@
+blob
+mark :1
+data 10
+/absolute
+
+blob
+mark :2
+data 13
+Hello, world
+
+blob
+mark :3
+data 12
+1/file1.txt
+
+reset refs/heads/main
+commit refs/heads/main
+mark :4
+author Me <me@example.com> 999985600 +0000
+committer Me <me@example.com> 999985600 +0000
+data 16
+Commit number 1
+deleteall
+M 120000 :1 "absolute link"
+M 100644 :2 file1.txt
+M 120000 :3 link.txt
+
+blob
+mark :5
+data 14
+Hello instead
+
+blob
+mark :6
+data 12
+2/file1.txt
+
+commit refs/heads/main
+mark :7
+author Me <me@example.com> 999989200 +0000
+committer Me <me@example.com> 999989200 +0000
+data 16
+Commit number 2
+from :4
+deleteall
+M 120000 :1 "absolute link"
+M 100644 :5 file1.txt
+M 120000 :6 link.txt
+
+blob
+mark :8
+data 19
+../dir/cyclingLink
+
+blob
+mark :9
+data 12
+../link.txt
+
+blob
+mark :10
+data 3
+..
+
+blob
+mark :11
+data 12
+3/file1.txt
+
+commit refs/heads/main
+mark :12
+author Me <me@example.com> 999992800 +0000
+committer Me <me@example.com> 999992800 +0000
+data 16
+Commit number 3
+from :7
+deleteall
+M 120000 :1 "absolute link"
+M 120000 :8 dir/cyclingLink
+M 120000 :9 dir/link
+M 120000 :10 dir/linkToParent
+M 100644 :5 file1.txt
+M 120000 :11 link.txt
+
+blob
+mark :13
+data 12
+4/file1.txt
+
+commit refs/heads/main
+mark :14
+author Me <me@example.com> 999996400 +0000
+committer Me <me@example.com> 999996400 +0000
+data 16
+Commit number 4
+from :12
+deleteall
+M 120000 :1 "absolute link"
+M 120000 :8 dir/cyclingLink
+M 120000 :9 dir/link
+M 120000 :10 dir/linkToParent
+M 120000 :13 link.txt

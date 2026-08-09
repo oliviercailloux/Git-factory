@@ -1,0 +1,20 @@
+blob
+mark :1
+data 13
+Hello, world
+
+blob
+mark :2
+data 12
+Hello again
+
+reset refs/heads/main
+commit refs/heads/main
+mark :3
+author Me <me@example.com> 999985600 +0000
+committer Me <me@example.com> 999985600 +0000
+data 16
+Commit number 1
+deleteall
+M 100644 :1 file1.txt
+M 100644 :2 file2.txt
