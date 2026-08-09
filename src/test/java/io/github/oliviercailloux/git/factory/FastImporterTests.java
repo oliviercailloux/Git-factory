@@ -3,6 +3,7 @@ package io.github.oliviercailloux.git.factory;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.google.common.collect.ImmutableList;
@@ -414,6 +415,54 @@ public class FastImporterTests {
             new String(repo.open(treeWalk.getObjectId(0)).getBytes(), StandardCharsets.UTF_8));
         assertFalse(treeWalk.next()); // old.txt gone
       }
+    }
+  }
+
+  @Test
+  void testFromBranchName() throws Exception {
+    try (DfsRepository repo =
+        FastImporter.importRepository(Resourcer.charSource("from-branch-name.fast-export"));
+        Git git = Git.wrap(repo)) {
+      final ImmutableList<RevCommit> commits = ImmutableList.copyOf(git.log().call());
+      assertEquals(2, commits.size());
+
+      final RevCommit second = commits.get(0);
+      final RevCommit first = commits.get(1);
+      assertEquals(1, second.getParentCount());
+      assertEquals(first.getId(), second.getParent(0).getId());
+
+      try (TreeWalk treeWalk = new TreeWalk(repo)) {
+        treeWalk.addTree(second.getTree());
+        treeWalk.setRecursive(true);
+        assertTrue(treeWalk.next());
+        assertEquals("file.txt", treeWalk.getPathString());
+        assertTrue(treeWalk.next());
+        assertEquals("later.txt", treeWalk.getPathString());
+        assertFalse(treeWalk.next());
+      }
+    }
+  }
+
+  @Test
+  void testLightweightTag() throws Exception {
+    try (DfsRepository repo =
+        FastImporter.importRepository(Resourcer.charSource("lightweight-tag.fast-export"))) {
+      final ObjectId mainId = repo.resolve("refs/heads/main");
+      final ObjectId tagId = repo.resolve("refs/tags/v1.0-lw");
+      assertNotNull(tagId);
+      assertEquals(mainId, tagId);
+      try (RevWalk rw = new RevWalk(repo)) {
+        assertEquals(Constants.OBJ_COMMIT, rw.parseAny(tagId).getType());
+      }
+    }
+  }
+
+  @Test
+  void testResetDeletesBranch() throws Exception {
+    try (DfsRepository repo =
+        FastImporter.importRepository(Resourcer.charSource("reset-delete-branch.fast-export"))) {
+      assertNotNull(repo.resolve("refs/heads/main"));
+      assertNull(repo.resolve("refs/heads/doomed"));
     }
   }
 

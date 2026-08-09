@@ -38,19 +38,25 @@ public class FastImporter {
 
     try (InputStream stream = new BufferedInputStream(source.openStream());
         ObjectInserter inserter = repository.getObjectDatabase().newInserter()) {
-      String line;
-      while ((line = MarkRegistry.readLine(stream)) != null) {
+      String line = MarkRegistry.readLine(stream);
+      while (line != null) {
         if (line.isEmpty()) {
+          line = MarkRegistry.readLine(stream);
           continue;
         }
         if (line.equals("blob")) {
           registry.readBlob(stream, inserter);
+          line = MarkRegistry.readLine(stream);
         } else if (line.startsWith("reset ")) {
-          // skip
+          line = registry.readReset(stream, repository, line.substring("reset ".length()));
         } else if (line.startsWith("commit ")) {
           registry.readCommit(stream, inserter, repository, line.substring("commit ".length()));
+          line = MarkRegistry.readLine(stream);
         } else if (line.startsWith("tag ")) {
           registry.readTag(stream, inserter, repository, line.substring("tag ".length()));
+          line = MarkRegistry.readLine(stream);
+        } else {
+          line = MarkRegistry.readLine(stream);
         }
       }
     }

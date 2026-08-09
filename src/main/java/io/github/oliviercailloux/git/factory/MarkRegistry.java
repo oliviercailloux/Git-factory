@@ -23,30 +23,82 @@ import org.eclipse.jgit.lib.PersonIdent;
 import org.eclipse.jgit.lib.RefUpdate;
 import org.eclipse.jgit.lib.RefUpdate.Result;
 import org.eclipse.jgit.lib.TagBuilder;
+import org.eclipse.jgit.revwalk.RevCommit;
+import org.eclipse.jgit.revwalk.RevWalk;
+import org.eclipse.jgit.treewalk.TreeWalk;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 class MarkRegistry {
-  private static sealed interface Mark permits OidMark, CommitMark {
-    ObjectId oid();
-  }
-
-  private static record OidMark(ObjectId oid) implements Mark {}
-
-  private static record CommitMark(ObjectId oid, Map<String, MEntry> files) implements Mark {}
-
   @SuppressWarnings("unused")
   private static final Logger LOGGER = LoggerFactory.getLogger(MarkRegistry.class);
 
-  private final Map<Integer, Mark> marks = new HashMap<>();
+  private final Map<Integer, ObjectId> marks = new HashMap<>();
 
   void readBlob(InputStream stream, ObjectInserter inserter) throws IOException {
     final int mark = readMark(stream);
     final int length = readDataLength(stream);
     final byte[] content = readExactlyBytes(stream, length);
     final ObjectId oid = inserter.insert(Constants.OBJ_BLOB, content);
-    marks.put(mark, new OidMark(oid));
+    marks.put(mark, oid);
     LOGGER.debug("Inserted blob mark :{} → {}.", mark, oid);
+  }
+
+  /**
+   * Reads the optional {@code from} line following a {@code reset <ref>} line and, if present,
+   * updates (or deletes, for the null SHA-1) the given ref accordingly. Returns the next
+   * unconsumed line, since the {@code from} line is optional and whatever follows it (or the
+   * {@code reset} line itself) belongs to the next top-level command.
+   */
+  String readReset(InputStream stream, InMemoryRepository repository, String ref)
+      throws IOException {
+    String line = readLine(stream);
+    if (line != null && line.startsWith("from ")) {
+      final ObjectId target = resolveCommitish(repository, line.substring("from ".length()));
+      if (ObjectId.zeroId().equals(target)) {
+        final RefUpdate updateRef = repository.updateRef(ref);
+        updateRef.setForceUpdate(true);
+        final Result result = updateRef.delete();
+        verify(result == Result.FORCED || result == Result.NO_CHANGE, result.toString());
+      } else {
+        FastImporter.setRef(repository, ref, target);
+      }
+      line = readLine(stream);
+    }
+    return line;
+  }
+
+  /**
+   * Resolves a fast-import {@code <commit-ish>}: a mark reference ({@code :N}), or else anything
+   * JGit's own revision resolution understands — a branch/tag name, a full or abbreviated SHA-1,
+   * a {@code ^0}-style suffix, and so on.
+   */
+  private ObjectId resolveCommitish(InMemoryRepository repository, String commitish)
+      throws IOException {
+    if (commitish.startsWith(":")) {
+      final ObjectId oid = marks.get(Integer.parseInt(commitish.substring(1)));
+      checkState(oid != null, "Unknown mark: %s", commitish);
+      return oid;
+    }
+    final ObjectId resolved = repository.resolve(commitish);
+    checkState(resolved != null, "Could not resolve commit-ish: %s", commitish);
+    return resolved;
+  }
+
+  /** Reads the flat path → entry map of an already-inserted commit's tree. */
+  private static Map<String, MEntry> filesOf(InMemoryRepository repository, ObjectId commitId)
+      throws IOException {
+    final Map<String, MEntry> files = new LinkedHashMap<>();
+    try (RevWalk revWalk = new RevWalk(repository); TreeWalk treeWalk = new TreeWalk(repository)) {
+      final RevCommit commit = revWalk.parseCommit(commitId);
+      treeWalk.addTree(commit.getTree());
+      treeWalk.setRecursive(true);
+      while (treeWalk.next()) {
+        files.put(treeWalk.getPathString(),
+            new MEntry(treeWalk.getFileMode(0), treeWalk.getObjectId(0)));
+      }
+    }
+    return files;
   }
 
   void readCommit(InputStream stream, ObjectInserter inserter,
@@ -65,24 +117,22 @@ class MarkRegistry {
 
     line = readLine(stream);
     final List<ObjectId> parents = new ArrayList<>();
-    Integer firstParentMark = null;
-    if (line != null && line.startsWith("from :")) {
-      firstParentMark = Integer.parseInt(line.substring("from :".length()));
-      parents.add(marks.get(firstParentMark).oid());
+    ObjectId firstParent = null;
+    if (line != null && line.startsWith("from ")) {
+      firstParent = resolveCommitish(repository, line.substring("from ".length()));
+      parents.add(firstParent);
       line = readLine(stream);
     }
-    while (line != null && line.startsWith("merge :")) {
-      parents.add(marks.get(Integer.parseInt(line.substring("merge :".length()))).oid());
+    while (line != null && line.startsWith("merge ")) {
+      parents.add(resolveCommitish(repository, line.substring("merge ".length())));
       line = readLine(stream);
     }
 
     final Map<String, MEntry> files = new LinkedHashMap<>();
     if ("deleteall".equals(line)) {
       line = readLine(stream);
-    } else {
-      if (marks.get(firstParentMark) instanceof CommitMark cm) {
-        files.putAll(cm.files());
-      }
+    } else if (firstParent != null) {
+      files.putAll(filesOf(repository, firstParent));
     }
 
     while (line != null && !line.isEmpty()) {
@@ -90,7 +140,7 @@ class MarkRegistry {
         final String[] parts = line.split(" ", 4);
         final FileMode mode = FileMode.fromBits(Integer.parseInt(parts[1], 8));
         final ObjectId oid = parts[2].startsWith(":")
-            ? marks.get(Integer.parseInt(parts[2].substring(1))).oid()
+            ? marks.get(Integer.parseInt(parts[2].substring(1)))
             : ObjectId.fromString(parts[2]);
         files.put(parsePath(parts[3]), new MEntry(mode, oid));
       } else if (line.startsWith("D ")) {
@@ -114,7 +164,7 @@ class MarkRegistry {
     final ObjectId commitId =
         FactoGitNew.insertCommit(inserter, author, committer, treeId, parents, message);
     inserter.flush();
-    marks.put(mark, new CommitMark(commitId, files));
+    marks.put(mark, commitId);
     LOGGER.debug("Inserted commit mark :{} → {}.", mark, commitId);
 
     FastImporter.setRef(repository, ref, commitId);
@@ -129,10 +179,7 @@ class MarkRegistry {
       line = readLine(stream);
     }
     checkState(line != null && line.startsWith("from "), "Expected from in tag, got: %s", line);
-    final String fromStr = line.substring("from ".length());
-    final ObjectId taggedId = fromStr.startsWith(":")
-        ? marks.get(Integer.parseInt(fromStr.substring(1))).oid()
-        : ObjectId.fromString(fromStr);
+    final ObjectId taggedId = resolveCommitish(repository, line.substring("from ".length()));
 
     line = readLine(stream);
     PersonIdent tagger = null;
@@ -156,7 +203,7 @@ class MarkRegistry {
     final ObjectId tagId = inserter.insert(tagBuilder);
     inserter.flush();
     if (markNum != null) {
-      marks.put(markNum, new OidMark(tagId));
+      marks.put(markNum, tagId);
     }
 
     final RefUpdate updateRef = repository.updateRef("refs/tags/" + tagName);
