@@ -416,4 +416,22 @@ public class FastImporterTests {
       }
     }
   }
+
+  @Test
+  void testQuotedPathWithSpace() throws Exception {
+    try (DfsRepository repo =
+        FastImporter.importRepository(Resourcer.charSource("quoted-path.fast-export"));
+        Git git = Git.wrap(repo)) {
+      final RevCommit commit = Iterables.getOnlyElement(git.log().call());
+      try (TreeWalk treeWalk = new TreeWalk(repo)) {
+        treeWalk.addTree(commit.getTree());
+        treeWalk.setRecursive(false);
+        assertTrue(treeWalk.next());
+        assertEquals("old file.txt", treeWalk.getNameString());
+        assertEquals("Hello world\n",
+            new String(repo.open(treeWalk.getObjectId(0)).getBytes(), StandardCharsets.UTF_8));
+        assertFalse(treeWalk.next());
+      }
+    }
+  }
 }
