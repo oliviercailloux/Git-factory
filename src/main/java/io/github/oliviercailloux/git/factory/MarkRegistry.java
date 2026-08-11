@@ -33,7 +33,182 @@ class MarkRegistry {
   @SuppressWarnings("unused")
   private static final Logger LOGGER = LoggerFactory.getLogger(MarkRegistry.class);
 
+  static MarkRegistry create() {
+    return new MarkRegistry();
+  }
+
+  static String readLine(InputStream stream) throws IOException {
+    final ByteArrayOutputStream buf = new ByteArrayOutputStream();
+    int b;
+    while ((b = stream.read()) != -1) {
+      if (b == '\n') {
+        break;
+      }
+      buf.write(b);
+    }
+    if (b == -1 && buf.size() == 0) {
+      return null;
+    }
+    return buf.toString(StandardCharsets.US_ASCII);
+  }
+
+  private static byte[] readExactlyBytes(InputStream stream, int length) throws IOException {
+    final byte[] buf = stream.readNBytes(length);
+    checkState(buf.length == length, "Expected %s bytes, got %s", length, buf.length);
+    return buf;
+  }
+
+  private static int parseDataLength(String line) {
+    checkState(line != null && line.startsWith("data "), "Expected data line, got: %s", line);
+    final String lengthOrDelimiter = line.substring("data ".length());
+    checkState(!lengthOrDelimiter.startsWith("<<"),
+        "Delimited data format is not supported, only the exact-byte-count form: %s", line);
+    return Integer.parseInt(lengthOrDelimiter);
+  }
+
+  private static int readDataLength(InputStream stream) throws IOException {
+    return parseDataLength(readLine(stream));
+  }
+
+  private static int readMark(InputStream stream) throws IOException {
+    final String line = readLine(stream);
+    checkState(line != null && line.startsWith("mark :"), "Expected mark line, got: %s", line);
+    return Integer.parseInt(line.substring("mark :".length()));
+  }
+
+  private static PersonIdent parseIdent(String rest) {
+    final int lt = rest.indexOf('<');
+    final int gt = rest.indexOf('>');
+    final String name = rest.substring(0, lt).trim();
+    final String email = rest.substring(lt + 1, gt);
+    final String[] timeParts = rest.substring(gt + 2).split(" ");
+    return new PersonIdent(name, email, Instant.ofEpochSecond(Long.parseLong(timeParts[0])),
+        ZoneOffset.of(timeParts[1]));
+  }
+
+  private static PersonIdent readIdent(InputStream stream, String prefix) throws IOException {
+    final String line = readLine(stream);
+    checkState(line != null && line.startsWith(prefix + " "), "Expected %s line, got: %s", prefix,
+        line);
+    return parseIdent(line.substring(prefix.length() + 1));
+  }
+
+  /**
+   * Parses a fast-import file mode: only the full octal forms git actually recognizes for a tree
+   * entry ({@code 100644}, {@code 100755}, {@code 120000}, {@code 160000}, {@code 040000}) are
+   * accepted; shorthand forms (e.g. {@code 644}) are rejected, rather than silently producing a
+   * bogus mode.
+   */
+  private static FileMode parseMode(String bitsToken) {
+    final FileMode mode = FileMode.fromBits(Integer.parseInt(bitsToken, 8));
+    checkState(
+        mode == FileMode.REGULAR_FILE || mode == FileMode.EXECUTABLE_FILE
+            || mode == FileMode.SYMLINK || mode == FileMode.GITLINK || mode == FileMode.TREE,
+        "Unsupported or invalid file mode (expected one of 100644, 100755, 120000, 160000, 040000): %s",
+        bitsToken);
+    return mode;
+  }
+
+  /**
+   * Returns the index right after the path token starting at {@code start}: past the closing
+   * quote if the token is quoted, otherwise the index of the next space (or end of string).
+   * Unquoted tokens cannot contain a space, per the fast-import format.
+   */
+  private static int pathTokenEnd(String s, int start) {
+    if (s.charAt(start) == '"') {
+      int i = start + 1;
+      while (i < s.length() && s.charAt(i) != '"') {
+        if (s.charAt(i) == '\\') {
+          i++;
+        }
+        i++;
+      }
+      checkState(i < s.length(), "Unterminated quoted path: %s", s);
+      return i + 1;
+    }
+    final int sp = s.indexOf(' ', start);
+    return sp < 0 ? s.length() : sp;
+  }
+
+  /** Unquotes a C-style quoted fast-import path, including its surrounding double quotes. */
+  private static String unquotePath(String quoted) {
+    checkState(quoted.length() >= 2 && quoted.charAt(quoted.length() - 1) == '"',
+        "Malformed quoted path: %s", quoted);
+    final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+    final String inner = quoted.substring(1, quoted.length() - 1);
+    int i = 0;
+    while (i < inner.length()) {
+      final char c = inner.charAt(i);
+      if (c != '\\') {
+        bytes.write(c);
+        i++;
+        continue;
+      }
+      i++;
+      checkState(i < inner.length(), "Truncated escape sequence in path: %s", quoted);
+      final char e = inner.charAt(i);
+      switch (e) {
+        case '\\' -> bytes.write('\\');
+        case '"' -> bytes.write('"');
+        case 'n' -> bytes.write('\n');
+        case 'a' -> bytes.write(7);
+        case 'b' -> bytes.write('\b');
+        case 'f' -> bytes.write('\f');
+        case 'r' -> bytes.write('\r');
+        case 't' -> bytes.write('\t');
+        case 'v' -> bytes.write(11);
+        default -> {
+          checkState(Character.isDigit(e) && i + 2 < inner.length(),
+              "Unknown escape sequence '\\%s' in path: %s", e, quoted);
+          bytes.write(Integer.parseInt(inner.substring(i, i + 3), 8));
+          i += 2;
+        }
+      }
+      i++;
+    }
+    return bytes.toString(StandardCharsets.UTF_8);
+  }
+
+  private static String parsePath(String token) {
+    return token.startsWith("\"") ? unquotePath(token) : token;
+  }
+
+  /** Reads the flat path → entry map of an already-inserted commit's tree. */
+  private static Map<String, MEntry> filesOf(InMemoryRepository repository, ObjectId commitId)
+      throws IOException {
+    final Map<String, MEntry> files = new LinkedHashMap<>();
+    try (RevWalk revWalk = new RevWalk(repository); TreeWalk treeWalk = new TreeWalk(repository)) {
+      final RevCommit commit = revWalk.parseCommit(commitId);
+      treeWalk.addTree(commit.getTree());
+      treeWalk.setRecursive(true);
+      while (treeWalk.next()) {
+        files.put(treeWalk.getPathString(),
+            new MEntry(treeWalk.getFileMode(0), treeWalk.getObjectId(0)));
+      }
+    }
+    return files;
+  }
+
   private final Map<Integer, ObjectId> marks = new HashMap<>();
+
+  private MarkRegistry() {}
+
+  /**
+   * Resolves a fast-import {@code <commit-ish>}: a mark reference ({@code :N}), or else anything
+   * JGit's own revision resolution understands — a branch/tag name, a full or abbreviated SHA-1,
+   * a {@code ^0}-style suffix, and so on.
+   */
+  private ObjectId resolveCommitish(InMemoryRepository repository, String commitish)
+      throws IOException {
+    if (commitish.startsWith(":")) {
+      final ObjectId oid = marks.get(Integer.parseInt(commitish.substring(1)));
+      checkState(oid != null, "Unknown mark: %s", commitish);
+      return oid;
+    }
+    final ObjectId resolved = repository.resolve(commitish);
+    checkState(resolved != null, "Could not resolve commit-ish: %s", commitish);
+    return resolved;
+  }
 
   void readBlob(InputStream stream, ObjectInserter inserter) throws IOException {
     final int mark = readMark(stream);
@@ -66,39 +241,6 @@ class MarkRegistry {
       line = readLine(stream);
     }
     return line;
-  }
-
-  /**
-   * Resolves a fast-import {@code <commit-ish>}: a mark reference ({@code :N}), or else anything
-   * JGit's own revision resolution understands — a branch/tag name, a full or abbreviated SHA-1,
-   * a {@code ^0}-style suffix, and so on.
-   */
-  private ObjectId resolveCommitish(InMemoryRepository repository, String commitish)
-      throws IOException {
-    if (commitish.startsWith(":")) {
-      final ObjectId oid = marks.get(Integer.parseInt(commitish.substring(1)));
-      checkState(oid != null, "Unknown mark: %s", commitish);
-      return oid;
-    }
-    final ObjectId resolved = repository.resolve(commitish);
-    checkState(resolved != null, "Could not resolve commit-ish: %s", commitish);
-    return resolved;
-  }
-
-  /** Reads the flat path → entry map of an already-inserted commit's tree. */
-  private static Map<String, MEntry> filesOf(InMemoryRepository repository, ObjectId commitId)
-      throws IOException {
-    final Map<String, MEntry> files = new LinkedHashMap<>();
-    try (RevWalk revWalk = new RevWalk(repository); TreeWalk treeWalk = new TreeWalk(repository)) {
-      final RevCommit commit = revWalk.parseCommit(commitId);
-      treeWalk.addTree(commit.getTree());
-      treeWalk.setRecursive(true);
-      while (treeWalk.next()) {
-        files.put(treeWalk.getPathString(),
-            new MEntry(treeWalk.getFileMode(0), treeWalk.getObjectId(0)));
-      }
-    }
-    return files;
   }
 
   void readCommit(InputStream stream, ObjectInserter inserter,
@@ -212,141 +354,5 @@ class MarkRegistry {
     updateRef.setNewObjectId(tagId);
     final Result result = updateRef.forceUpdate();
     verify(result == Result.NEW || result == Result.FORCED, result.toString());
-  }
-
-  static String readLine(InputStream stream) throws IOException {
-    final ByteArrayOutputStream buf = new ByteArrayOutputStream();
-    int b;
-    while ((b = stream.read()) != -1) {
-      if (b == '\n') {
-        break;
-      }
-      buf.write(b);
-    }
-    if (b == -1 && buf.size() == 0) {
-      return null;
-    }
-    return buf.toString(StandardCharsets.US_ASCII);
-  }
-
-  private static int readMark(InputStream stream) throws IOException {
-    final String line = readLine(stream);
-    checkState(line != null && line.startsWith("mark :"), "Expected mark line, got: %s", line);
-    return Integer.parseInt(line.substring("mark :".length()));
-  }
-
-  private static int readDataLength(InputStream stream) throws IOException {
-    return parseDataLength(readLine(stream));
-  }
-
-  private static int parseDataLength(String line) {
-    checkState(line != null && line.startsWith("data "), "Expected data line, got: %s", line);
-    final String lengthOrDelimiter = line.substring("data ".length());
-    checkState(!lengthOrDelimiter.startsWith("<<"),
-        "Delimited data format is not supported, only the exact-byte-count form: %s", line);
-    return Integer.parseInt(lengthOrDelimiter);
-  }
-
-  private static byte[] readExactlyBytes(InputStream stream, int length) throws IOException {
-    final byte[] buf = stream.readNBytes(length);
-    checkState(buf.length == length, "Expected %s bytes, got %s", length, buf.length);
-    return buf;
-  }
-
-  private static PersonIdent readIdent(InputStream stream, String prefix) throws IOException {
-    final String line = readLine(stream);
-    checkState(line != null && line.startsWith(prefix + " "), "Expected %s line, got: %s", prefix,
-        line);
-    return parseIdent(line.substring(prefix.length() + 1));
-  }
-
-  /**
-   * Parses a fast-import file mode: only the full octal forms git actually recognizes for a tree
-   * entry ({@code 100644}, {@code 100755}, {@code 120000}, {@code 160000}, {@code 040000}) are
-   * accepted; shorthand forms (e.g. {@code 644}) are rejected, rather than silently producing a
-   * bogus mode.
-   */
-  private static FileMode parseMode(String bitsToken) {
-    final FileMode mode = FileMode.fromBits(Integer.parseInt(bitsToken, 8));
-    checkState(
-        mode == FileMode.REGULAR_FILE || mode == FileMode.EXECUTABLE_FILE
-            || mode == FileMode.SYMLINK || mode == FileMode.GITLINK || mode == FileMode.TREE,
-        "Unsupported or invalid file mode (expected one of 100644, 100755, 120000, 160000, 040000): %s",
-        bitsToken);
-    return mode;
-  }
-
-  private static PersonIdent parseIdent(String rest) {
-    final int lt = rest.indexOf('<');
-    final int gt = rest.indexOf('>');
-    final String name = rest.substring(0, lt).trim();
-    final String email = rest.substring(lt + 1, gt);
-    final String[] timeParts = rest.substring(gt + 2).split(" ");
-    return new PersonIdent(name, email, Instant.ofEpochSecond(Long.parseLong(timeParts[0])),
-        ZoneOffset.of(timeParts[1]));
-  }
-
-  /**
-   * Returns the index right after the path token starting at {@code start}: past the closing
-   * quote if the token is quoted, otherwise the index of the next space (or end of string).
-   * Unquoted tokens cannot contain a space, per the fast-import format.
-   */
-  private static int pathTokenEnd(String s, int start) {
-    if (s.charAt(start) == '"') {
-      int i = start + 1;
-      while (i < s.length() && s.charAt(i) != '"') {
-        if (s.charAt(i) == '\\') {
-          i++;
-        }
-        i++;
-      }
-      checkState(i < s.length(), "Unterminated quoted path: %s", s);
-      return i + 1;
-    }
-    final int sp = s.indexOf(' ', start);
-    return sp < 0 ? s.length() : sp;
-  }
-
-  private static String parsePath(String token) {
-    return token.startsWith("\"") ? unquotePath(token) : token;
-  }
-
-  /** Unquotes a C-style quoted fast-import path, including its surrounding double quotes. */
-  private static String unquotePath(String quoted) {
-    checkState(quoted.length() >= 2 && quoted.charAt(quoted.length() - 1) == '"',
-        "Malformed quoted path: %s", quoted);
-    final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-    final String inner = quoted.substring(1, quoted.length() - 1);
-    int i = 0;
-    while (i < inner.length()) {
-      final char c = inner.charAt(i);
-      if (c != '\\') {
-        bytes.write(c);
-        i++;
-        continue;
-      }
-      i++;
-      checkState(i < inner.length(), "Truncated escape sequence in path: %s", quoted);
-      final char e = inner.charAt(i);
-      switch (e) {
-        case '\\' -> bytes.write('\\');
-        case '"' -> bytes.write('"');
-        case 'n' -> bytes.write('\n');
-        case 'a' -> bytes.write(7);
-        case 'b' -> bytes.write('\b');
-        case 'f' -> bytes.write('\f');
-        case 'r' -> bytes.write('\r');
-        case 't' -> bytes.write('\t');
-        case 'v' -> bytes.write(11);
-        default -> {
-          checkState(Character.isDigit(e) && i + 2 < inner.length(),
-              "Unknown escape sequence '\\%s' in path: %s", e, quoted);
-          bytes.write(Integer.parseInt(inner.substring(i, i + 3), 8));
-          i += 2;
-        }
-      }
-      i++;
-    }
-    return bytes.toString(StandardCharsets.UTF_8);
   }
 }

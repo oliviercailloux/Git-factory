@@ -71,61 +71,6 @@ public class FactoGit {
   @SuppressWarnings("unused")
   private static final Logger LOGGER = LoggerFactory.getLogger(FactoGit.class);
 
-  @SuppressWarnings("unused")
-  private static ImmutableSet<Path> toLineOwn(Graph<Path> lineGraph) {
-    if (lineGraph.nodes().isEmpty()) {
-      return ImmutableSet.of();
-    }
-    final ImmutableSet<Path> starters = lineGraph.nodes().stream()
-        .filter(n -> lineGraph.predecessors(n).isEmpty()).collect(ImmutableSet.toImmutableSet());
-    if (starters.isEmpty()) {
-      verify(Graphs.hasCycle(lineGraph));
-      throw new IllegalArgumentException("The given (supposedly 'line') graph has a cycle.");
-    }
-    if (starters.size() >= 2) {
-      throw new IllegalArgumentException(
-          "The given (supposedly 'line') graph has more than one starting point"
-              + " (node with no parent).");
-    }
-    final Path starter = Iterables.getOnlyElement(starters);
-
-    final ImmutableSet.Builder<Path> builder = ImmutableSet.builder();
-    Path current = starter;
-    do {
-      builder.add(current);
-      final Set<Path> nexts = lineGraph.successors(current);
-      if (nexts.isEmpty()) {
-        break;
-      }
-      if (nexts.size() >= 2) {
-        throw new IllegalArgumentException(
-            "The given (supposedly 'line') graph branches (some node has multiple children).");
-      }
-      current = Iterables.getOnlyElement(nexts);
-    } while (true);
-
-    final ImmutableSet<Path> line = builder.build();
-    if (line.size() != lineGraph.nodes().size()) {
-      /*
-       * Only one starter but we did not exhaust the graph by following it; so some other component
-       * of it cycles.
-       */
-      verify(Graphs.hasCycle(lineGraph));
-      throw new IllegalArgumentException("The given (supposedly 'line') graph has a cycle.");
-    }
-    return line;
-  }
-
-  private static ImmutableSet<Path> toLine(Graph<Path> lineGraph) {
-    checkArgument(lineGraph.nodes().stream().filter(n -> lineGraph.inDegree(n) == 0).count() == 1L);
-    checkArgument(lineGraph.nodes().stream().allMatch(n -> lineGraph.inDegree(n) <= 1));
-    checkArgument(
-        lineGraph.nodes().stream().filter(n -> lineGraph.outDegree(n) == 0).count() == 1L);
-    checkArgument(lineGraph.nodes().stream().allMatch(n -> lineGraph.outDegree(n) <= 1));
-    verify(!Graphs.hasCycle(lineGraph));
-    return GraphUtils.topologicallySortedNodes(lineGraph);
-  }
-
   private static enum ConstantDag {
     BASIC, SUB, LINKED
   }
@@ -317,7 +262,93 @@ public class FactoGit {
   public static void clearConfig() {
     SystemReader.setInstance(new EmptyConfigSystemReader());
   }
-  
+
+  public static InMemoryRepository createBasicRepo() throws IOException {
+    final FactoGit f = FactoGit.empty();
+    f.setBasicDag();
+    return f.build();
+  }
+
+  public static InMemoryRepository createRepository(IdStamp ident, Graph<Path> baseDirs, Path links)
+      throws IOException {
+    final FactoGit f = FactoGit.empty();
+    f.setIdentConstant(ident);
+    f.setDag(baseDirs);
+    f.setLinks(links);
+    return f.build();
+  }
+
+  public static InMemoryRepository createRepository(IdStamp ident, String path, String content)
+      throws IOException {
+    try (FileSystem jimFs = Jimfs.newFileSystem(Configuration.unix())) {
+      final Path workDir = jimFs.getPath("");
+
+      final Path target = workDir.resolve(path);
+      Files.createDirectories(target.getParent());
+      Files.writeString(target, content);
+
+      final FactoGit f = FactoGit.empty();
+      f.setIdentConstant(ident);
+      f.setSingletonDag(target);
+      return f.build();
+    }
+  }
+
+  @SuppressWarnings("unused")
+  private static ImmutableSet<Path> toLineOwn(Graph<Path> lineGraph) {
+    if (lineGraph.nodes().isEmpty()) {
+      return ImmutableSet.of();
+    }
+    final ImmutableSet<Path> starters = lineGraph.nodes().stream()
+        .filter(n -> lineGraph.predecessors(n).isEmpty()).collect(ImmutableSet.toImmutableSet());
+    if (starters.isEmpty()) {
+      verify(Graphs.hasCycle(lineGraph));
+      throw new IllegalArgumentException("The given (supposedly 'line') graph has a cycle.");
+    }
+    if (starters.size() >= 2) {
+      throw new IllegalArgumentException(
+          "The given (supposedly 'line') graph has more than one starting point"
+              + " (node with no parent).");
+    }
+    final Path starter = Iterables.getOnlyElement(starters);
+
+    final ImmutableSet.Builder<Path> builder = ImmutableSet.builder();
+    Path current = starter;
+    do {
+      builder.add(current);
+      final Set<Path> nexts = lineGraph.successors(current);
+      if (nexts.isEmpty()) {
+        break;
+      }
+      if (nexts.size() >= 2) {
+        throw new IllegalArgumentException(
+            "The given (supposedly 'line') graph branches (some node has multiple children).");
+      }
+      current = Iterables.getOnlyElement(nexts);
+    } while (true);
+
+    final ImmutableSet<Path> line = builder.build();
+    if (line.size() != lineGraph.nodes().size()) {
+      /*
+       * Only one starter but we did not exhaust the graph by following it; so some other component
+       * of it cycles.
+       */
+      verify(Graphs.hasCycle(lineGraph));
+      throw new IllegalArgumentException("The given (supposedly 'line') graph has a cycle.");
+    }
+    return line;
+  }
+
+  private static ImmutableSet<Path> toLine(Graph<Path> lineGraph) {
+    checkArgument(lineGraph.nodes().stream().filter(n -> lineGraph.inDegree(n) == 0).count() == 1L);
+    checkArgument(lineGraph.nodes().stream().allMatch(n -> lineGraph.inDegree(n) <= 1));
+    checkArgument(
+        lineGraph.nodes().stream().filter(n -> lineGraph.outDegree(n) == 0).count() == 1L);
+    checkArgument(lineGraph.nodes().stream().allMatch(n -> lineGraph.outDegree(n) <= 1));
+    verify(!Graphs.hasCycle(lineGraph));
+    return GraphUtils.topologicallySortedNodes(lineGraph);
+  }
+
   private static Function<Path, IdStamp> identsFunction(ImmutableGraph<Path> ourDag,
       IdStamp identStartThenIncrease) {
     final Function<Path, IdStamp> ourIdent;
@@ -349,6 +380,105 @@ public class FactoGit {
   private static PersonIdent personIdent(IdStamp ident) {
     return new PersonIdent(ident.name(), ident.email(), ident.timestamp().toInstant(),
         ident.timestamp().getZone());
+  }
+
+  /**
+   * Inserts a tree containing the content of the given directory.
+   * <p>
+   * Does not flush the inserter.
+   */
+  private static ObjectId insertTree(ObjectInserter inserter, Path directory) throws IOException {
+    checkArgument(Files.isDirectory(directory));
+
+    /*
+     * TODO TreeFormatter says that the entries must come in the <i>right</i> order; what’s that?
+     */
+    final TreeFormatter treeFormatter = new TreeFormatter();
+
+    /* See TreeFormatter: “This formatter does not process subtrees”. */
+    try (Stream<Path> content = Files.list(directory);) {
+      for (Path relEntry : (Iterable<Path>) content::iterator) {
+        final String entryName = relEntry.getFileName().toString();
+        /* Work around Jimfs bug, see https://github.com/google/jimfs/issues/105 . */
+        final Path entry = relEntry.toAbsolutePath();
+        if (Files.isRegularFile(entry, LinkOption.NOFOLLOW_LINKS)) {
+          LOGGER.debug("Creating regular: {}.", entry);
+          final String fileContent = Files.readString(entry);
+          final ObjectId fileOid =
+              inserter.insert(Constants.OBJ_BLOB, fileContent.getBytes(StandardCharsets.UTF_8));
+          treeFormatter.append(entryName, FileMode.REGULAR_FILE, fileOid);
+        } else if (Files.isDirectory(entry, LinkOption.NOFOLLOW_LINKS)) {
+          final ObjectId tree = insertTree(inserter, entry);
+          treeFormatter.append(entryName, FileMode.TREE, tree);
+        } else if (Files.isSymbolicLink(entry)) {
+          LOGGER.debug("Creating link: {}.", entry);
+          final String destSlashSeparated;
+          {
+            final Path dest = Files.readSymbolicLink(entry);
+            final String separator = dest.getFileSystem().getSeparator();
+            if (dest.getFileSystem().provider().getScheme().equals("file")
+                && separator.equals("\\")) {
+              destSlashSeparated = dest.toString().replace("\\", "/");
+            } else {
+              checkArgument(separator.equals("/"));
+              destSlashSeparated = dest.toString();
+            }
+          }
+          final byte[] destAsBytes = destSlashSeparated.getBytes(StandardCharsets.UTF_8);
+          final ObjectId fileObjId = inserter.insert(Constants.OBJ_BLOB, destAsBytes);
+          treeFormatter.append(entryName, FileMode.SYMLINK, fileObjId);
+        } else {
+          throw new IllegalArgumentException("Unknown entry: " + entry);
+        }
+      }
+    }
+
+    final ObjectId inserted = inserter.insert(treeFormatter);
+    return inserted;
+  }
+
+  private static ObjectId insertCommit(ObjectInserter inserter, PersonIdent personIdent,
+      ObjectId treeId, List<ObjectId> parents, String commitMessage) throws IOException {
+    final CommitBuilder commitBuilder = new CommitBuilder();
+    commitBuilder.setMessage(commitMessage);
+    commitBuilder.setAuthor(personIdent);
+    commitBuilder.setCommitter(personIdent);
+    commitBuilder.setTreeId(treeId);
+    for (ObjectId parent : parents) {
+      commitBuilder.addParentId(parent);
+    }
+    final ObjectId commitId = inserter.insert(commitBuilder);
+    inserter.flush();
+    LOGGER.debug("Created commit: {}.", commitId);
+    return commitId;
+  }
+
+  private static ObjectId insertCommit(ObjectInserter inserter, PersonIdent personIdent,
+      Path directory, List<ObjectId> parents, String commitMessage) throws IOException {
+    final ObjectId treeId = insertTree(inserter, directory);
+    return insertCommit(inserter, personIdent, treeId, parents, commitMessage);
+  }
+
+  private static void setMainAndHead(Repository repository, ObjectId newId) throws IOException {
+    {
+      final RefUpdate updateRef = repository.updateRef("refs/heads/main");
+      updateRef.setNewObjectId(newId);
+      final Result updateResult = updateRef.update();
+      Verify.verify(updateResult == Result.NEW, updateResult.toString());
+    }
+    {
+      final ImmutableList<Ref> refs = ImmutableList.copyOf(repository.getRefDatabase().getRefs());
+      verify(refs.size() == 1, refs.toString());
+    }
+    {
+      final RefUpdate updateRef = repository.updateRef(Constants.HEAD);
+      final Result updateResult = updateRef.link("refs/heads/main");
+      verify(updateResult == Result.FORCED, updateResult.toString());
+      {
+        final ImmutableList<Ref> refs = ImmutableList.copyOf(repository.getRefDatabase().getRefs());
+        verify(refs.size() == 2, refs.toString());
+      }
+    }
   }
 
   private String name;
@@ -520,135 +650,5 @@ public class FactoGit {
     }
 
     return repository;
-  }
-
-  public static InMemoryRepository createBasicRepo() throws IOException {
-    final FactoGit f = FactoGit.empty();
-    f.setBasicDag();
-    return f.build();
-  }
-
-  public static InMemoryRepository createRepository(IdStamp ident, Graph<Path> baseDirs, Path links)
-      throws IOException {
-    final FactoGit f = FactoGit.empty();
-    f.setIdentConstant(ident);
-    f.setDag(baseDirs);
-    f.setLinks(links);
-    return f.build();
-  }
-
-  public static InMemoryRepository createRepository(IdStamp ident, String path, String content)
-      throws IOException {
-    try (FileSystem jimFs = Jimfs.newFileSystem(Configuration.unix())) {
-      final Path workDir = jimFs.getPath("");
-
-      final Path target = workDir.resolve(path);
-      Files.createDirectories(target.getParent());
-      Files.writeString(target, content);
-
-      final FactoGit f = FactoGit.empty();
-      f.setIdentConstant(ident);
-      f.setSingletonDag(target);
-      return f.build();
-    }
-  }
-
-  private static ObjectId insertCommit(ObjectInserter inserter, PersonIdent personIdent,
-      Path directory, List<ObjectId> parents, String commitMessage) throws IOException {
-    final ObjectId treeId = insertTree(inserter, directory);
-    return insertCommit(inserter, personIdent, treeId, parents, commitMessage);
-  }
-
-  private static ObjectId insertCommit(ObjectInserter inserter, PersonIdent personIdent,
-      ObjectId treeId, List<ObjectId> parents, String commitMessage) throws IOException {
-    final CommitBuilder commitBuilder = new CommitBuilder();
-    commitBuilder.setMessage(commitMessage);
-    commitBuilder.setAuthor(personIdent);
-    commitBuilder.setCommitter(personIdent);
-    commitBuilder.setTreeId(treeId);
-    for (ObjectId parent : parents) {
-      commitBuilder.addParentId(parent);
-    }
-    final ObjectId commitId = inserter.insert(commitBuilder);
-    inserter.flush();
-    LOGGER.debug("Created commit: {}.", commitId);
-    return commitId;
-  }
-
-  /**
-   * Inserts a tree containing the content of the given directory.
-   * <p>
-   * Does not flush the inserter.
-   */
-  private static ObjectId insertTree(ObjectInserter inserter, Path directory) throws IOException {
-    checkArgument(Files.isDirectory(directory));
-
-    /*
-     * TODO TreeFormatter says that the entries must come in the <i>right</i> order; what’s that?
-     */
-    final TreeFormatter treeFormatter = new TreeFormatter();
-
-    /* See TreeFormatter: “This formatter does not process subtrees”. */
-    try (Stream<Path> content = Files.list(directory);) {
-      for (Path relEntry : (Iterable<Path>) content::iterator) {
-        final String entryName = relEntry.getFileName().toString();
-        /* Work around Jimfs bug, see https://github.com/google/jimfs/issues/105 . */
-        final Path entry = relEntry.toAbsolutePath();
-        if (Files.isRegularFile(entry, LinkOption.NOFOLLOW_LINKS)) {
-          LOGGER.debug("Creating regular: {}.", entry);
-          final String fileContent = Files.readString(entry);
-          final ObjectId fileOid =
-              inserter.insert(Constants.OBJ_BLOB, fileContent.getBytes(StandardCharsets.UTF_8));
-          treeFormatter.append(entryName, FileMode.REGULAR_FILE, fileOid);
-        } else if (Files.isDirectory(entry, LinkOption.NOFOLLOW_LINKS)) {
-          final ObjectId tree = insertTree(inserter, entry);
-          treeFormatter.append(entryName, FileMode.TREE, tree);
-        } else if (Files.isSymbolicLink(entry)) {
-          LOGGER.debug("Creating link: {}.", entry);
-          final String destSlashSeparated;
-          {
-            final Path dest = Files.readSymbolicLink(entry);
-            final String separator = dest.getFileSystem().getSeparator();
-            if (dest.getFileSystem().provider().getScheme().equals("file")
-                && separator.equals("\\")) {
-              destSlashSeparated = dest.toString().replace("\\", "/");
-            } else {
-              checkArgument(separator.equals("/"));
-              destSlashSeparated = dest.toString();
-            }
-          }
-          final byte[] destAsBytes = destSlashSeparated.getBytes(StandardCharsets.UTF_8);
-          final ObjectId fileObjId = inserter.insert(Constants.OBJ_BLOB, destAsBytes);
-          treeFormatter.append(entryName, FileMode.SYMLINK, fileObjId);
-        } else {
-          throw new IllegalArgumentException("Unknown entry: " + entry);
-        }
-      }
-    }
-
-    final ObjectId inserted = inserter.insert(treeFormatter);
-    return inserted;
-  }
-
-  private static void setMainAndHead(Repository repository, ObjectId newId) throws IOException {
-    {
-      final RefUpdate updateRef = repository.updateRef("refs/heads/main");
-      updateRef.setNewObjectId(newId);
-      final Result updateResult = updateRef.update();
-      Verify.verify(updateResult == Result.NEW, updateResult.toString());
-    }
-    {
-      final ImmutableList<Ref> refs = ImmutableList.copyOf(repository.getRefDatabase().getRefs());
-      verify(refs.size() == 1, refs.toString());
-    }
-    {
-      final RefUpdate updateRef = repository.updateRef(Constants.HEAD);
-      final Result updateResult = updateRef.link("refs/heads/main");
-      verify(updateResult == Result.FORCED, updateResult.toString());
-      {
-        final ImmutableList<Ref> refs = ImmutableList.copyOf(repository.getRefDatabase().getRefs());
-        verify(refs.size() == 2, refs.toString());
-      }
-    }
   }
 }

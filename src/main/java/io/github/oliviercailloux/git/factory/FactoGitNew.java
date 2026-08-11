@@ -70,6 +70,10 @@ public class FactoGitNew {
       OnDemandFunctionOfPath.onBreadthFirst(
           () -> IntStream.iterate(1, i -> i + 1).mapToObj(i -> "Commit number " + i).iterator());
 
+  private static String defaultName() {
+    return "factogit-created on " + Instant.now().truncatedTo(ChronoUnit.MILLIS);
+  }
+
   /**
    * Returns an instance with an empty DAG and all defaults: epoch committer, auto-numbered messages,
    * and a name of the form {@code "factogit created on <ISO timestamp>"}.
@@ -89,10 +93,6 @@ public class FactoGitNew {
     return new FactoGitNew(defaultName(), ImmutableGraph.copyOf(dag), DEFAULT_COMMITTERS, DEFAULT_MESSAGES);
   }
 
-  private static String defaultName() {
-    return "factogit-created on " + Instant.now().truncatedTo(ChronoUnit.MILLIS);
-  }
-
   private static MutableGraph<Path> mutableCopy(Graph<Path> source) {
     MutableGraph<Path> copy = GraphBuilder.from(source).build();
     source.nodes().forEach(copy::addNode);
@@ -103,20 +103,6 @@ public class FactoGitNew {
   private static PersonIdent personIdent(IdStamp ident) {
     return new PersonIdent(ident.name(), ident.email(), ident.timestamp().toInstant(),
         ident.timestamp().getZone());
-  }
-
-  /** Builds and inserts one commit object. Does not flush; the caller is responsible. */
-  static ObjectId insertCommit(ObjectInserter inserter, PersonIdent author, PersonIdent committer,
-      ObjectId treeId, List<ObjectId> parents, String message) throws IOException {
-    CommitBuilder commitBuilder = new CommitBuilder();
-    commitBuilder.setMessage(message);
-    commitBuilder.setAuthor(author);
-    commitBuilder.setCommitter(committer);
-    commitBuilder.setTreeId(treeId);
-    for (ObjectId parent : parents) {
-      commitBuilder.addParentId(parent);
-    }
-    return inserter.insert(commitBuilder);
   }
 
   /**
@@ -166,6 +152,20 @@ public class FactoGitNew {
       }
     }
     return inserter.insert(treeFormatter);
+  }
+
+  /** Builds and inserts one commit object. Does not flush; the caller is responsible. */
+  static ObjectId insertCommit(ObjectInserter inserter, PersonIdent author, PersonIdent committer,
+      ObjectId treeId, List<ObjectId> parents, String message) throws IOException {
+    CommitBuilder commitBuilder = new CommitBuilder();
+    commitBuilder.setMessage(message);
+    commitBuilder.setAuthor(author);
+    commitBuilder.setCommitter(committer);
+    commitBuilder.setTreeId(treeId);
+    for (ObjectId parent : parents) {
+      commitBuilder.addParentId(parent);
+    }
+    return inserter.insert(commitBuilder);
   }
 
   private static void setMainAndHead(Repository repository, ObjectId newId) throws IOException {

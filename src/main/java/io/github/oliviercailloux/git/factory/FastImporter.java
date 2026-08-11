@@ -27,37 +27,14 @@ import org.eclipse.jgit.lib.TreeFormatter;
 
 public class FastImporter {
   /**
-   * A single commit with two sibling files ({@code file1.txt}, {@code file2.txt}). Equivalent
-   * topology to the deprecated {@code FactoGit#setBasicDag()}.
+   * Whether the given top-level line is a fast-import command this importer deliberately treats
+   * as a no-op, because it carries no information relevant to the resulting repository content:
+   * a stream comment, or one of {@code checkpoint}/{@code progress}/{@code done}/{@code feature}/
+   * {@code option}.
    */
-  public static DfsRepository basic() throws IOException {
-    return importRepository(bundled("basic.fast-export"));
-  }
-
-  /**
-   * A 3-commit line, growing the tree at each step and ending with a subdirectory
-   * ({@code dir/file.txt}). Equivalent topology to the deprecated {@code FactoGit#setSubDag()}.
-   */
-  public static DfsRepository sub() throws IOException {
-    return importRepository(bundled("sub.fast-export"));
-  }
-
-  /**
-   * A 4-commit line exercising symlinks: relative, absolute (dangling by construction), a
-   * subdirectory holding a link into its parent and a self-cycling link, and finally a dangling
-   * relative link after its target file is removed. Equivalent topology to the deprecated
-   * {@code FactoGit#setLinkedDag()}.
-   */
-  public static DfsRepository linked() throws IOException {
-    return importRepository(bundled("linked.fast-export"));
-  }
-
-  private static ByteSource bundled(String resourceName) {
-    return Resources.asByteSource(Resources.getResource(FastImporter.class, resourceName));
-  }
-
-  public static DfsRepository importRepository(CharSource source) throws IOException {
-    return importRepository(ByteSource.wrap(source.read().getBytes(StandardCharsets.UTF_8)));
+  private static boolean isHarmlessTopLevelCommand(String line) {
+    return line.startsWith("#") || line.equals("checkpoint") || line.startsWith("progress ")
+        || line.equals("done") || line.startsWith("feature ") || line.startsWith("option ");
   }
 
   public static DfsRepository importRepository(ByteSource source) throws IOException {
@@ -65,7 +42,7 @@ public class FastImporter {
         new InMemoryRepository(new DfsRepositoryDescription(""));
     repository.create(true);
 
-    final MarkRegistry registry = new MarkRegistry();
+    final MarkRegistry registry = MarkRegistry.create();
 
     try (InputStream stream = new BufferedInputStream(source.openStream());
         ObjectInserter inserter = repository.getObjectDatabase().newInserter()) {
@@ -97,15 +74,38 @@ public class FastImporter {
     return repository;
   }
 
+  public static DfsRepository importRepository(CharSource source) throws IOException {
+    return importRepository(ByteSource.wrap(source.read().getBytes(StandardCharsets.UTF_8)));
+  }
+
+  private static ByteSource bundled(String resourceName) {
+    return Resources.asByteSource(Resources.getResource(FastImporter.class, resourceName));
+  }
+
   /**
-   * Whether the given top-level line is a fast-import command this importer deliberately treats
-   * as a no-op, because it carries no information relevant to the resulting repository content:
-   * a stream comment, or one of {@code checkpoint}/{@code progress}/{@code done}/{@code feature}/
-   * {@code option}.
+   * A single commit with two sibling files ({@code file1.txt}, {@code file2.txt}). Equivalent
+   * topology to the deprecated {@code FactoGit#setBasicDag()}.
    */
-  private static boolean isHarmlessTopLevelCommand(String line) {
-    return line.startsWith("#") || line.equals("checkpoint") || line.startsWith("progress ")
-        || line.equals("done") || line.startsWith("feature ") || line.startsWith("option ");
+  public static DfsRepository basic() throws IOException {
+    return importRepository(bundled("basic.fast-export"));
+  }
+
+  /**
+   * A 3-commit line, growing the tree at each step and ending with a subdirectory
+   * ({@code dir/file.txt}). Equivalent topology to the deprecated {@code FactoGit#setSubDag()}.
+   */
+  public static DfsRepository sub() throws IOException {
+    return importRepository(bundled("sub.fast-export"));
+  }
+
+  /**
+   * A 4-commit line exercising symlinks: relative, absolute (dangling by construction), a
+   * subdirectory holding a link into its parent and a self-cycling link, and finally a dangling
+   * relative link after its target file is removed. Equivalent topology to the deprecated
+   * {@code FactoGit#setLinkedDag()}.
+   */
+  public static DfsRepository linked() throws IOException {
+    return importRepository(bundled("linked.fast-export"));
   }
 
   private static sealed interface TreeNode permits FileNode, DirNode {}
@@ -113,15 +113,6 @@ public class FastImporter {
   private static record FileNode(MEntry entry) implements TreeNode {}
 
   private static record DirNode(LinkedHashMap<String, TreeNode> children) implements TreeNode {}
-
-  static ObjectId insertTree(ObjectInserter inserter, Map<String, MEntry> files)
-      throws IOException {
-    DirNode root = new DirNode(new LinkedHashMap<>());
-    for (Map.Entry<String, MEntry> entry : files.entrySet()) {
-      root = putEntry(root, entry.getKey(), entry.getValue());
-    }
-    return insertDirNode(inserter, root);
-  }
 
   private static DirNode putEntry(DirNode dir, String path, MEntry entry) {
     final LinkedHashMap<String, TreeNode> newChildren = new LinkedHashMap<>(dir.children());
@@ -161,6 +152,15 @@ public class FastImporter {
       }
     }
     return inserter.insert(formatter);
+  }
+
+  static ObjectId insertTree(ObjectInserter inserter, Map<String, MEntry> files)
+      throws IOException {
+    DirNode root = new DirNode(new LinkedHashMap<>());
+    for (Map.Entry<String, MEntry> entry : files.entrySet()) {
+      root = putEntry(root, entry.getKey(), entry.getValue());
+    }
+    return insertDirNode(inserter, root);
   }
 
   static void setRef(Repository repository, String ref, ObjectId newId) throws IOException {

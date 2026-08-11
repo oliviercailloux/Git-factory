@@ -48,23 +48,14 @@ public class GitCloner {
     }
   }
 
-  public FileRepository download(GitUri uri, Path workTree) {
-    for (int i = 0; i < 1; ++i) {
-      try {
-        return downloadGeneral(uri, workTree, false);
-      } catch (GitAPIException e) {
-        LOGGER.error("Oops, retrying temporarily.", e);
-      }
-    }
-    throw new IllegalStateException("Failed.");
-  }
-
-  public FileRepository downloadBare(GitUri uri, Path gitDir) {
-    try {
-      return downloadGeneral(uri, gitDir, true);
-    } catch (GitAPIException e) {
-      throw new IllegalStateException(e);
-    }
+  private String toString(Status status) {
+    return MoreObjects.toStringHelper(status).add("Added", status.getAdded())
+        .add("Changed", status.getChanged()).add("Conflicting", status.getConflicting())
+        .add("Ignored not in index", status.getIgnoredNotInIndex())
+        .add("Missing", status.getMissing()).add("Modified", status.getModified())
+        .add("Removed", status.getRemoved())
+        .add("Uncommitted changes", status.getUncommittedChanges())
+        .add("Untracked", status.getUntracked()).toString();
   }
 
   /**
@@ -165,13 +156,22 @@ public class GitCloner {
     return repository;
   }
 
-  private String toString(Status status) {
-    return MoreObjects.toStringHelper(status).add("Added", status.getAdded())
-        .add("Changed", status.getChanged()).add("Conflicting", status.getConflicting())
-        .add("Ignored not in index", status.getIgnoredNotInIndex())
-        .add("Missing", status.getMissing()).add("Modified", status.getModified())
-        .add("Removed", status.getRemoved())
-        .add("Uncommitted changes", status.getUncommittedChanges())
-        .add("Untracked", status.getUntracked()).toString();
+  public FileRepository download(GitUri uri, Path workTree) {
+    for (int i = 0; i < 1; ++i) {
+      try {
+        return downloadGeneral(uri, workTree, false);
+      } catch (GitAPIException e) {
+        LOGGER.error("Oops, retrying temporarily.", e);
+      }
+    }
+    throw new IllegalStateException("Failed.");
+  }
+
+  public FileRepository downloadBare(GitUri uri, Path gitDir) {
+    try {
+      return downloadGeneral(uri, gitDir, true);
+    } catch (GitAPIException e) {
+      throw new IllegalStateException(e);
+    }
   }
 }

@@ -57,9 +57,98 @@ public class JGit {
   @SuppressWarnings("unused")
   private static final Logger LOGGER = LoggerFactory.getLogger(JGit.class);
 
-  public static InMemoryRepository createRepository(PersonIdent personIdent, Graph<Path> baseDirs,
-      Path links) throws IOException {
-    return createRepository(Maps.asMap(baseDirs.nodes(), p -> personIdent), baseDirs, links);
+  private static ObjectId insertTree(ObjectInserter inserter, Path directory) throws IOException {
+    checkArgument(Files.isDirectory(directory));
+
+    /*
+     * TODO TreeFormatter says that the entries must come in the <i>right</i> order; what’s that?
+     */
+    final TreeFormatter treeFormatter = new TreeFormatter();
+
+    /* See TreeFormatter: “This formatter does not process subtrees”. */
+    try (Stream<Path> content = Files.list(directory);) {
+      for (Path relEntry : (Iterable<Path>) content::iterator) {
+        final String entryName = relEntry.getFileName().toString();
+        /* Work around Jimfs bug, see https://github.com/google/jimfs/issues/105 . */
+        final Path entry = relEntry.toAbsolutePath();
+        if (Files.isRegularFile(entry, LinkOption.NOFOLLOW_LINKS)) {
+          LOGGER.debug("Creating regular: {}.", entry);
+          final String fileContent = Files.readString(entry);
+          final ObjectId fileOid =
+              inserter.insert(Constants.OBJ_BLOB, fileContent.getBytes(StandardCharsets.UTF_8));
+          treeFormatter.append(entryName, FileMode.REGULAR_FILE, fileOid);
+        } else if (Files.isDirectory(entry, LinkOption.NOFOLLOW_LINKS)) {
+          final ObjectId tree = insertTree(inserter, entry);
+          treeFormatter.append(entryName, FileMode.TREE, tree);
+        } else if (Files.isSymbolicLink(entry)) {
+          LOGGER.debug("Creating link: {}.", entry);
+          final String destSlashSeparated;
+          {
+            final Path dest = Files.readSymbolicLink(entry);
+            final String separator = dest.getFileSystem().getSeparator();
+            if (dest.getFileSystem().provider().getScheme().equals("file")
+                && separator.equals("\\")) {
+              destSlashSeparated = dest.toString().replace("\\", "/");
+            } else {
+              checkArgument(separator.equals("/"));
+              destSlashSeparated = dest.toString();
+            }
+          }
+          final byte[] destAsBytes = destSlashSeparated.getBytes(StandardCharsets.UTF_8);
+          final ObjectId fileOId = inserter.insert(Constants.OBJ_BLOB, destAsBytes);
+          treeFormatter.append(entryName, FileMode.SYMLINK, fileOId);
+        } else {
+          throw new IllegalArgumentException("Unknown entry: " + entry);
+        }
+      }
+    }
+
+    final ObjectId inserted = inserter.insert(treeFormatter);
+    return inserted;
+  }
+
+  private static ObjectId insertCommit(ObjectInserter inserter, PersonIdent personIdent,
+      ObjectId treeId, List<ObjectId> parents, String commitMessage) throws IOException {
+    final CommitBuilder commitBuilder = new CommitBuilder();
+    commitBuilder.setMessage(commitMessage);
+    commitBuilder.setAuthor(personIdent);
+    commitBuilder.setCommitter(personIdent);
+    commitBuilder.setTreeId(treeId);
+    for (ObjectId parent : parents) {
+      commitBuilder.addParentId(parent);
+    }
+    final ObjectId commitId = inserter.insert(commitBuilder);
+    inserter.flush();
+    LOGGER.debug("Created commit: {}.", commitId);
+    return commitId;
+  }
+
+  private static ObjectId insertCommit(ObjectInserter inserter, PersonIdent personIdent,
+      Path directory, List<ObjectId> parents, String commitMessage) throws IOException {
+    final ObjectId treeId = insertTree(inserter, directory);
+    return insertCommit(inserter, personIdent, treeId, parents, commitMessage);
+  }
+
+  public static void setMain(Repository repository, ObjectId newId) {
+    try {
+      final RefUpdate updateRef = repository.updateRef("refs/heads/main");
+      updateRef.setNewObjectId(newId);
+      final Result updateResult = updateRef.update();
+      Verify.verify(updateResult == Result.NEW, updateResult.toString());
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
+    }
+    try {
+      final RefUpdate updateRef = repository.updateRef(Constants.HEAD);
+      final Result updateResult = updateRef.link("refs/heads/main");
+      /*
+       * Not sure this is best practice. But if HEAD is not set here, then log() commands fail on
+       * repositories created with the above methods.
+       */
+      Verify.verify(updateResult == Result.FORCED, updateResult.toString());
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
+    }
   }
 
   public static InMemoryRepository createRepository(Map<Path, PersonIdent> identities,
@@ -109,6 +198,11 @@ public class JGit {
     }
 
     return repository;
+  }
+
+  public static InMemoryRepository createRepository(PersonIdent personIdent, Graph<Path> baseDirs,
+      Path links) throws IOException {
+    return createRepository(Maps.asMap(baseDirs.nodes(), p -> personIdent), baseDirs, links);
   }
 
   public static InMemoryRepository createRepository(PersonIdent personIdent, String path,
@@ -215,11 +309,6 @@ public class JGit {
     }
   }
 
-  public static ImmutableList<ObjectId> createRepoWithSubDir(Repository repository)
-      throws IOException {
-    return createRepoWithSubDir(repository, ZonedDateTime.now(ZoneId.of("Europe/Paris")));
-  }
-
   public static ImmutableList<ObjectId> createRepoWithSubDir(Repository repository,
       ZonedDateTime created) throws IOException {
     repository.create(true);
@@ -264,102 +353,8 @@ public class JGit {
     }
   }
 
-  private static ObjectId insertCommit(ObjectInserter inserter, PersonIdent personIdent,
-      Path directory, List<ObjectId> parents, String commitMessage) throws IOException {
-    final ObjectId treeId = insertTree(inserter, directory);
-    return insertCommit(inserter, personIdent, treeId, parents, commitMessage);
-  }
-
-  private static ObjectId insertCommit(ObjectInserter inserter, PersonIdent personIdent,
-      ObjectId treeId, List<ObjectId> parents, String commitMessage) throws IOException {
-    final CommitBuilder commitBuilder = new CommitBuilder();
-    commitBuilder.setMessage(commitMessage);
-    commitBuilder.setAuthor(personIdent);
-    commitBuilder.setCommitter(personIdent);
-    commitBuilder.setTreeId(treeId);
-    for (ObjectId parent : parents) {
-      commitBuilder.addParentId(parent);
-    }
-    final ObjectId commitId = inserter.insert(commitBuilder);
-    inserter.flush();
-    LOGGER.debug("Created commit: {}.", commitId);
-    return commitId;
-  }
-
-  /**
-   * Inserts a tree containing the content of the given directory.
-   * <p>
-   * Does not flush the inserter.
-   */
-  private static ObjectId insertTree(ObjectInserter inserter, Path directory) throws IOException {
-    checkArgument(Files.isDirectory(directory));
-
-    /*
-     * TODO TreeFormatter says that the entries must come in the <i>right</i> order; what’s that?
-     */
-    final TreeFormatter treeFormatter = new TreeFormatter();
-
-    /* See TreeFormatter: “This formatter does not process subtrees”. */
-    try (Stream<Path> content = Files.list(directory);) {
-      for (Path relEntry : (Iterable<Path>) content::iterator) {
-        final String entryName = relEntry.getFileName().toString();
-        /* Work around Jimfs bug, see https://github.com/google/jimfs/issues/105 . */
-        final Path entry = relEntry.toAbsolutePath();
-        if (Files.isRegularFile(entry, LinkOption.NOFOLLOW_LINKS)) {
-          LOGGER.debug("Creating regular: {}.", entry);
-          final String fileContent = Files.readString(entry);
-          final ObjectId fileOid =
-              inserter.insert(Constants.OBJ_BLOB, fileContent.getBytes(StandardCharsets.UTF_8));
-          treeFormatter.append(entryName, FileMode.REGULAR_FILE, fileOid);
-        } else if (Files.isDirectory(entry, LinkOption.NOFOLLOW_LINKS)) {
-          final ObjectId tree = insertTree(inserter, entry);
-          treeFormatter.append(entryName, FileMode.TREE, tree);
-        } else if (Files.isSymbolicLink(entry)) {
-          LOGGER.debug("Creating link: {}.", entry);
-          final String destSlashSeparated;
-          {
-            final Path dest = Files.readSymbolicLink(entry);
-            final String separator = dest.getFileSystem().getSeparator();
-            if (dest.getFileSystem().provider().getScheme().equals("file")
-                && separator.equals("\\")) {
-              destSlashSeparated = dest.toString().replace("\\", "/");
-            } else {
-              checkArgument(separator.equals("/"));
-              destSlashSeparated = dest.toString();
-            }
-          }
-          final byte[] destAsBytes = destSlashSeparated.getBytes(StandardCharsets.UTF_8);
-          final ObjectId fileOId = inserter.insert(Constants.OBJ_BLOB, destAsBytes);
-          treeFormatter.append(entryName, FileMode.SYMLINK, fileOId);
-        } else {
-          throw new IllegalArgumentException("Unknown entry: " + entry);
-        }
-      }
-    }
-
-    final ObjectId inserted = inserter.insert(treeFormatter);
-    return inserted;
-  }
-
-  public static void setMain(Repository repository, ObjectId newId) {
-    try {
-      final RefUpdate updateRef = repository.updateRef("refs/heads/main");
-      updateRef.setNewObjectId(newId);
-      final Result updateResult = updateRef.update();
-      Verify.verify(updateResult == Result.NEW, updateResult.toString());
-    } catch (IOException e) {
-      throw new UncheckedIOException(e);
-    }
-    try {
-      final RefUpdate updateRef = repository.updateRef(Constants.HEAD);
-      final Result updateResult = updateRef.link("refs/heads/main");
-      /*
-       * Not sure this is best practice. But if HEAD is not set here, then log() commands fail on
-       * repositories created with the above methods.
-       */
-      Verify.verify(updateResult == Result.FORCED, updateResult.toString());
-    } catch (IOException e) {
-      throw new UncheckedIOException(e);
-    }
+  public static ImmutableList<ObjectId> createRepoWithSubDir(Repository repository)
+      throws IOException {
+    return createRepoWithSubDir(repository, ZonedDateTime.now(ZoneId.of("Europe/Paris")));
   }
 }
