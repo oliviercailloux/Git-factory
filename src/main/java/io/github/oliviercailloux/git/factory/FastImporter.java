@@ -86,8 +86,17 @@ public class FastImporter {
    * A single commit with two sibling files ({@code file1.txt}, {@code file2.txt}). Equivalent
    * topology to the deprecated {@code FactoGit#setBasicDag()}.
    */
-  public static DfsRepository basic() throws IOException {
-    return importRepository(bundled("basic.fast-export"));
+  public static DfsRepository single() throws IOException {
+    return importRepository(bundled("single.fast-export"));
+  }
+
+  /**
+   * A 2-commit line: the first commit has a single file ({@code file1.txt}), the second adds a
+   * sibling ({@code file2.txt}). Equivalent topology to the deprecated
+   * {@code JGit#createBasicRepo(Repository)}.
+   */
+  public static DfsRepository dual() throws IOException {
+    return importRepository(bundled("dual.fast-export"));
   }
 
   /**

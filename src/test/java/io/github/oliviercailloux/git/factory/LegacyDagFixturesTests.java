@@ -8,6 +8,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.function.Consumer;
 import org.eclipse.jgit.internal.storage.dfs.DfsRepository;
+import org.eclipse.jgit.internal.storage.dfs.DfsRepositoryDescription;
+import org.eclipse.jgit.internal.storage.dfs.InMemoryRepository;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevSort;
@@ -16,20 +18,28 @@ import org.eclipse.jgit.treewalk.TreeWalk;
 import org.junit.jupiter.api.Test;
 
 /**
- * Verifies that {@link FastImporter#basic()}, {@link FastImporter#sub()} and
- * {@link FastImporter#linked()} reproduce the same tree content, commit-by-commit, as the
- * deprecated {@link FactoGit#setBasicDag()}, {@link FactoGit#setSubDag()} and
- * {@link FactoGit#setLinkedDag()} they are meant to replace. Identities and timestamps are
- * deliberately not compared: the legacy DAGs use empty identities and the current time, which the
- * new, deterministic fixtures do not attempt to reproduce. Blob and symlink-target content is
- * compared modulo a single trailing newline: the legacy DAGs write file content verbatim (no
- * trailing newline), while the new fixtures follow this project's fast-export fixture convention
- * of ending data blocks with one.
+ * Verifies that {@link FastImporter#single()}, {@link FastImporter#dual()},
+ * {@link FastImporter#sub()} and {@link FastImporter#linked()} reproduce the same tree content,
+ * commit-by-commit, as the deprecated fixtures they are meant to replace:
+ * {@link FactoGit#setBasicDag()}, {@link JGit#createBasicRepo(Repository)},
+ * {@link FactoGit#setSubDag()} and {@link FactoGit#setLinkedDag()}, respectively. Identities and
+ * timestamps are deliberately not compared: the legacy fixtures use empty identities and the
+ * current time, which the new, deterministic fixtures do not attempt to reproduce. Blob and
+ * symlink-target content is compared modulo a single trailing newline: the legacy fixtures write
+ * file content verbatim (no trailing newline), while the new fixtures follow this project's
+ * fast-export fixture convention of ending data blocks with one.
  */
 public class LegacyDagFixturesTests {
   @Test
-  void testBasicMatchesLegacy() throws Exception {
-    assertSameContent(FactoGit::setBasicDag, FastImporter.basic());
+  void testSingleMatchesLegacy() throws Exception {
+    assertSameContent(FactoGit::setBasicDag, FastImporter.single());
+  }
+
+  @Test
+  void testDualMatchesLegacy() throws Exception {
+    final InMemoryRepository expected = new InMemoryRepository(new DfsRepositoryDescription(""));
+    JGit.createBasicRepo(expected);
+    assertSameContent(expected, FastImporter.dual());
   }
 
   @Test
@@ -46,7 +56,12 @@ public class LegacyDagFixturesTests {
       throws IOException {
     final FactoGit f = FactoGit.empty();
     legacyDag.accept(f);
-    try (Repository expected = f.build(); actual) {
+    assertSameContent(f.build(), actual);
+  }
+
+  private static void assertSameContent(Repository expected, DfsRepository actual)
+      throws IOException {
+    try (expected; actual) {
       final ImmutableList<ImmutableMap<String, String>> expectedTrees = treesOf(expected);
       final ImmutableList<ImmutableMap<String, String>> actualTrees = treesOf(actual);
       assertEquals(expectedTrees, actualTrees);
