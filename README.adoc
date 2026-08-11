@@ -3,7 +3,6 @@
 Utilities for creating in-memory JGit repositories programmatically, primarily for use in tests.
 
 == `FastImporter`: fast-export format coverage
-
 `FastImporter` parses `git fast-export` output into an `InMemoryRepository`. It is tested against blobs, multi-commit chains, nested/multi-level directories, executable files, symlinks, gitlinks, merge commits, multiple branches, annotated tags, lightweight tags and branch deletion via `reset`, `from`/`merge` resolved via mark, branch name, or any other JGit-recognized revision expression, distinct author/committer identities, the `encoding` header, non-ASCII content, quoted/escaped paths (including paths containing a space), git's directory-vs-file tree sort order, and patch-style `M`/`D`/`R`/`C` operations (see `FastImporterTests` and the fixtures under `src/test/resources/…/*.fast-export`).
 
 It does not cover the full `git fast-import` stream format. Constructs outside that coverage fail fast with a clear `IllegalStateException` rather than being silently ignored or mis-parsed — verified by dedicated tests (`test*FailsFast` in `FastImporterTests`) that assert each one throws instead of silently producing an incomplete or wrong repository:
