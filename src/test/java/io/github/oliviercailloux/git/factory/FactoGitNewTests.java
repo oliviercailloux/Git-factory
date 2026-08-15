@@ -22,12 +22,15 @@ import java.util.Map;
 import java.util.Set;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.internal.storage.dfs.DfsRepository;
+import org.eclipse.jgit.internal.storage.file.FileRepository;
 import org.eclipse.jgit.lib.FileMode;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevWalk;
+import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
 import org.eclipse.jgit.treewalk.TreeWalk;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 public class FactoGitNewTests {
 
@@ -422,6 +425,25 @@ public class FactoGitNewTests {
             assertEquals("a", tw.getNameString());
             assertFalse(tw.next());
           }
+        }
+      }
+    }
+  }
+
+  @Test
+  void testEmptyFileRepository(@TempDir Path gitDir) throws Exception {
+    try (FileSystem fs = Jimfs.newFileSystem(Configuration.unix())) {
+      Path contentDir = fs.getPath("content");
+      Files.createDirectories(contentDir);
+      Files.writeString(contentDir.resolve("hello.txt"), "hello");
+      try (FileRepository repo = (FileRepository) FactoGitNew.empty().withRoot(contentDir)
+          .repo(new FileRepositoryBuilder().setGitDir(gitDir.toFile()))) {
+        assertNotNull(repo.resolve("refs/heads/main"));
+        try (RevWalk rw = new RevWalk(repo)) {
+          RevCommit commit = rw.parseCommit(repo.resolve("refs/heads/main"));
+          assertEquals(0, commit.getParentCount());
+          Map<String, String> contents = treeContents(repo, commit);
+          assertEquals(Map.of("hello.txt", "hello"), contents);
         }
       }
     }

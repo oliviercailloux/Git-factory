@@ -28,12 +28,13 @@ import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Set;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.eclipse.jgit.internal.storage.dfs.DfsRepository;
+import org.eclipse.jgit.internal.storage.dfs.DfsRepositoryBuilder;
 import org.eclipse.jgit.internal.storage.dfs.DfsRepositoryDescription;
 import org.eclipse.jgit.internal.storage.dfs.InMemoryRepository;
+import org.eclipse.jgit.lib.BaseRepositoryBuilder;
 import org.eclipse.jgit.lib.CommitBuilder;
 import org.eclipse.jgit.lib.Constants;
 import org.eclipse.jgit.lib.FileMode;
@@ -267,16 +268,16 @@ public class FactoGitNew {
   }
 
   /**
-   * Builds and returns a fresh {@link DfsRepository}. Safe to call multiple times.
+   * Builds and returns a fresh repository created by {@code builder}. Safe to call multiple times.
    *
    * <p>Commits are inserted in topological order. {@code refs/heads/main} and {@code HEAD} are
    * set to the last node visited in breadth-first order from all roots.
    */
-  public DfsRepository repo() throws IOException {
+  public <R extends Repository> R repo(BaseRepositoryBuilder<?, R> builder) throws IOException {
     TFunction<Path, IdStamp, IOException> ourCommitters = committers.summon(dag);
     TFunction<Path, String, IOException> ourMessages = commitMessages.summon(dag);
 
-    InMemoryRepository repository = new InMemoryRepository(new DfsRepositoryDescription(name));
+    R repository = builder.build();
     repository.create(true);
 
     ImmutableSet<Path> topoOrder = GraphUtils.topologicallySortedNodes(dag);
@@ -310,5 +311,11 @@ public class FactoGitNew {
     }
 
     return repository;
+  }
+
+  /** Builds and returns a fresh {@link DfsRepository}. */
+  public DfsRepository repo() throws IOException {
+    return repo(new InMemoryRepository.Builder()
+        .setRepositoryDescription(new DfsRepositoryDescription(name)));
   }
 }
