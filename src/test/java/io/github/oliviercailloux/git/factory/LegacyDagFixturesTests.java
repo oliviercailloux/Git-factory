@@ -32,24 +32,24 @@ import org.junit.jupiter.api.Test;
 public class LegacyDagFixturesTests {
   @Test
   void testSingleMatchesLegacy() throws Exception {
-    assertSameContent(FactoGit::setBasicDag, FastImporter.single());
+    assertSameContent(FactoGit::setBasicDag, FastImporter.toDfs().single());
   }
 
   @Test
   void testDualMatchesLegacy() throws Exception {
     final InMemoryRepository expected = new InMemoryRepository(new DfsRepositoryDescription(""));
     JGit.createBasicRepo(expected);
-    assertSameContent(expected, FastImporter.dual());
+    assertSameContent(expected, FastImporter.toDfs().dual());
   }
 
   @Test
   void testSubMatchesLegacy() throws Exception {
-    assertSameContent(FactoGit::setSubDag, FastImporter.sub());
+    assertSameContent(FactoGit::setSubDag, FastImporter.toDfs().sub());
   }
 
   @Test
   void testLinkedMatchesLegacy() throws Exception {
-    assertSameContent(FactoGit::setLinkedDag, FastImporter.linked());
+    assertSameContent(FactoGit::setLinkedDag, FastImporter.toDfs().linked());
   }
 
   private static void assertSameContent(Consumer<FactoGit> legacyDag, DfsRepository actual)

@@ -6,6 +6,7 @@ import com.google.common.io.ByteSource;
 import com.google.common.io.CharSource;
 import com.google.common.io.Resources;
 import java.io.BufferedInputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -14,8 +15,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.eclipse.jgit.internal.storage.dfs.DfsRepository;
+import org.eclipse.jgit.internal.storage.dfs.DfsRepositoryBuilder;
 import org.eclipse.jgit.internal.storage.dfs.DfsRepositoryDescription;
 import org.eclipse.jgit.internal.storage.dfs.InMemoryRepository;
+import org.eclipse.jgit.internal.storage.file.FileRepository;
+import org.eclipse.jgit.lib.BaseRepositoryBuilder;
 import org.eclipse.jgit.lib.Constants;
 import org.eclipse.jgit.lib.FileMode;
 import org.eclipse.jgit.lib.ObjectId;
@@ -25,96 +29,56 @@ import org.eclipse.jgit.lib.RefUpdate.Result;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.lib.TreeFormatter;
 
-public class FastImporter {
-  /**
-   * Whether the given top-level line is a fast-import command this importer deliberately treats
-   * as a no-op, because it carries no information relevant to the resulting repository content:
-   * a stream comment, or one of {@code checkpoint}/{@code progress}/{@code done}/{@code feature}/
-   * {@code option}.
-   */
+public class FastImporter<R extends Repository> {
+  /** Builds an {@link InMemoryRepository}, typed as {@link DfsRepository}. */
+  private static final class DfsBuilder
+      extends DfsRepositoryBuilder<DfsBuilder, DfsRepository> {
+    @Override
+    public DfsRepository build() throws IOException {
+      DfsRepositoryDescription desc = getRepositoryDescription();
+      return new InMemoryRepository(desc != null ? desc : new DfsRepositoryDescription(""));
+    }
+  }
+
+  /** Builds a {@link FileRepository}. Set a git dir via {@link #setGitDir} before calling {@link #build}. */
+  private static final class FileBuilder
+      extends BaseRepositoryBuilder<FileBuilder, FileRepository> {
+    @Override
+    public FileRepository build() throws IOException {
+      return new FileRepository(this);
+    }
+  }
+
+  @FunctionalInterface
+  private interface RepositoryFactory<R extends Repository> {
+    R create() throws IOException;
+  }
+
+  /** Default instance that builds each call into a fresh {@link InMemoryRepository}. */
+  private static final FastImporter<DfsRepository> DFS_BUILDER =
+      new FastImporter<>(() -> new InMemoryRepository(new DfsRepositoryDescription("")));
+
+  /** Returns the default instance that builds into a fresh {@link DfsRepository}. */
+  public static FastImporter<DfsRepository> toDfs() {
+    return DFS_BUILDER;
+  }
+
+  /** Returns an instance that builds into a fresh {@link FileRepository} rooted at {@code gitDir}. */
+  public static FastImporter<FileRepository> toFile(File gitDir) {
+    return using(new FileBuilder().setGitDir(gitDir));
+  }
+
+  public static <R extends Repository> FastImporter<R> using(BaseRepositoryBuilder<?, R> builder) {
+    return new FastImporter<>(builder::build);
+  }
+
   private static boolean isHarmlessTopLevelCommand(String line) {
     return line.startsWith("#") || line.equals("checkpoint") || line.startsWith("progress ")
         || line.equals("done") || line.startsWith("feature ") || line.startsWith("option ");
   }
 
-  public static DfsRepository importRepository(ByteSource source) throws IOException {
-    final InMemoryRepository repository =
-        new InMemoryRepository(new DfsRepositoryDescription(""));
-    repository.create(true);
-
-    final MarkRegistry registry = MarkRegistry.create();
-
-    try (InputStream stream = new BufferedInputStream(source.openStream());
-        ObjectInserter inserter = repository.getObjectDatabase().newInserter()) {
-      String line = MarkRegistry.readLine(stream);
-      while (line != null) {
-        if (line.isEmpty()) {
-          line = MarkRegistry.readLine(stream);
-          continue;
-        }
-        if (line.equals("blob")) {
-          registry.readBlob(stream, inserter);
-          line = MarkRegistry.readLine(stream);
-        } else if (line.startsWith("reset ")) {
-          line = registry.readReset(stream, repository, line.substring("reset ".length()));
-        } else if (line.startsWith("commit ")) {
-          registry.readCommit(stream, inserter, repository, line.substring("commit ".length()));
-          line = MarkRegistry.readLine(stream);
-        } else if (line.startsWith("tag ")) {
-          registry.readTag(stream, inserter, repository, line.substring("tag ".length()));
-          line = MarkRegistry.readLine(stream);
-        } else if (isHarmlessTopLevelCommand(line)) {
-          line = MarkRegistry.readLine(stream);
-        } else {
-          throw new IllegalStateException("Unsupported fast-import command: " + line);
-        }
-      }
-    }
-
-    return repository;
-  }
-
-  public static DfsRepository importRepository(CharSource source) throws IOException {
-    return importRepository(ByteSource.wrap(source.read().getBytes(StandardCharsets.UTF_8)));
-  }
-
   private static ByteSource bundled(String resourceName) {
     return Resources.asByteSource(Resources.getResource(FastImporter.class, resourceName));
-  }
-
-  /**
-   * A single commit with two sibling files ({@code file1.txt}, {@code file2.txt}). Equivalent
-   * topology to the deprecated {@code FactoGit#setBasicDag()}.
-   */
-  public static DfsRepository single() throws IOException {
-    return importRepository(bundled("single.fast-export"));
-  }
-
-  /**
-   * A 2-commit line: the first commit has a single file ({@code file1.txt}), the second adds a
-   * sibling ({@code file2.txt}). Equivalent topology to the deprecated
-   * {@code JGit#createBasicRepo(Repository)}.
-   */
-  public static DfsRepository dual() throws IOException {
-    return importRepository(bundled("dual.fast-export"));
-  }
-
-  /**
-   * A 3-commit line, growing the tree at each step and ending with a subdirectory
-   * ({@code dir/file.txt}). Equivalent topology to the deprecated {@code FactoGit#setSubDag()}.
-   */
-  public static DfsRepository sub() throws IOException {
-    return importRepository(bundled("sub.fast-export"));
-  }
-
-  /**
-   * A 4-commit line exercising symlinks: relative, absolute (dangling by construction), a
-   * subdirectory holding a link into its parent and a self-cycling link, and finally a dangling
-   * relative link after its target file is removed. Equivalent topology to the deprecated
-   * {@code FactoGit#setLinkedDag()}.
-   */
-  public static DfsRepository linked() throws IOException {
-    return importRepository(bundled("linked.fast-export"));
   }
 
   private static sealed interface TreeNode permits FileNode, DirNode {}
@@ -184,5 +148,88 @@ public class FastImporter {
     }
   }
 
-  private FastImporter() {}
+  private final RepositoryFactory<R> factory;
+
+  private FastImporter(RepositoryFactory<R> factory) {
+    this.factory = factory;
+  }
+
+  /**
+   * Parses {@code source} as a {@code git fast-export} stream into a new repository created by
+   * this instance's factory.
+   */
+  public R importRepository(ByteSource source) throws IOException {
+    R repository = factory.create();
+    repository.create(true);
+
+    final MarkRegistry registry = MarkRegistry.create();
+
+    try (InputStream stream = new BufferedInputStream(source.openStream());
+        ObjectInserter inserter = repository.getObjectDatabase().newInserter()) {
+      String line = MarkRegistry.readLine(stream);
+      while (line != null) {
+        if (line.isEmpty()) {
+          line = MarkRegistry.readLine(stream);
+          continue;
+        }
+        if (line.equals("blob")) {
+          registry.readBlob(stream, inserter);
+          line = MarkRegistry.readLine(stream);
+        } else if (line.startsWith("reset ")) {
+          line = registry.readReset(stream, repository, line.substring("reset ".length()));
+        } else if (line.startsWith("commit ")) {
+          registry.readCommit(stream, inserter, repository, line.substring("commit ".length()));
+          line = MarkRegistry.readLine(stream);
+        } else if (line.startsWith("tag ")) {
+          registry.readTag(stream, inserter, repository, line.substring("tag ".length()));
+          line = MarkRegistry.readLine(stream);
+        } else if (isHarmlessTopLevelCommand(line)) {
+          line = MarkRegistry.readLine(stream);
+        } else {
+          throw new IllegalStateException("Unsupported fast-import command: " + line);
+        }
+      }
+    }
+
+    return repository;
+  }
+
+  public R importRepository(CharSource source) throws IOException {
+    return importRepository(ByteSource.wrap(source.read().getBytes(StandardCharsets.UTF_8)));
+  }
+
+  /**
+   * A single commit with two sibling files ({@code file1.txt}, {@code file2.txt}). Equivalent
+   * topology to the deprecated {@code FactoGit#setBasicDag()}.
+   */
+  public R single() throws IOException {
+    return importRepository(bundled("single.fast-export"));
+  }
+
+  /**
+   * A 2-commit line: the first commit has a single file ({@code file1.txt}), the second adds a
+   * sibling ({@code file2.txt}). Equivalent topology to the deprecated
+   * {@code JGit#createBasicRepo(Repository)}.
+   */
+  public R dual() throws IOException {
+    return importRepository(bundled("dual.fast-export"));
+  }
+
+  /**
+   * A 3-commit line, growing the tree at each step and ending with a subdirectory
+   * ({@code dir/file.txt}). Equivalent topology to the deprecated {@code FactoGit#setSubDag()}.
+   */
+  public R sub() throws IOException {
+    return importRepository(bundled("sub.fast-export"));
+  }
+
+  /**
+   * A 4-commit line exercising symlinks: relative, absolute (dangling by construction), a
+   * subdirectory holding a link into its parent and a self-cycling link, and finally a dangling
+   * relative link after its target file is removed. Equivalent topology to the deprecated
+   * {@code FactoGit#setLinkedDag()}.
+   */
+  public R linked() throws IOException {
+    return importRepository(bundled("linked.fast-export"));
+  }
 }
