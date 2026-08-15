@@ -14,7 +14,6 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import org.eclipse.jgit.internal.storage.dfs.InMemoryRepository;
 import org.eclipse.jgit.lib.Constants;
 import org.eclipse.jgit.lib.FileMode;
 import org.eclipse.jgit.lib.ObjectId;
@@ -22,6 +21,7 @@ import org.eclipse.jgit.lib.ObjectInserter;
 import org.eclipse.jgit.lib.PersonIdent;
 import org.eclipse.jgit.lib.RefUpdate;
 import org.eclipse.jgit.lib.RefUpdate.Result;
+import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.lib.TagBuilder;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevWalk;
@@ -174,7 +174,7 @@ class MarkRegistry {
   }
 
   /** Reads the flat path → entry map of an already-inserted commit's tree. */
-  private static Map<String, MEntry> filesOf(InMemoryRepository repository, ObjectId commitId)
+  private static Map<String, MEntry> filesOf(Repository repository, ObjectId commitId)
       throws IOException {
     final Map<String, MEntry> files = new LinkedHashMap<>();
     try (RevWalk revWalk = new RevWalk(repository); TreeWalk treeWalk = new TreeWalk(repository)) {
@@ -198,7 +198,7 @@ class MarkRegistry {
    * JGit's own revision resolution understands — a branch/tag name, a full or abbreviated SHA-1,
    * a {@code ^0}-style suffix, and so on.
    */
-  private ObjectId resolveCommitish(InMemoryRepository repository, String commitish)
+  private ObjectId resolveCommitish(Repository repository, String commitish)
       throws IOException {
     if (commitish.startsWith(":")) {
       final ObjectId oid = marks.get(Integer.parseInt(commitish.substring(1)));
@@ -225,7 +225,7 @@ class MarkRegistry {
    * unconsumed line, since the {@code from} line is optional and whatever follows it (or the
    * {@code reset} line itself) belongs to the next top-level command.
    */
-  String readReset(InputStream stream, InMemoryRepository repository, String ref)
+  String readReset(InputStream stream, Repository repository, String ref)
       throws IOException {
     String line = readLine(stream);
     if (line != null && line.startsWith("from ")) {
@@ -244,7 +244,7 @@ class MarkRegistry {
   }
 
   void readCommit(InputStream stream, ObjectInserter inserter,
-      InMemoryRepository repository, String ref) throws IOException {
+      Repository repository, String ref) throws IOException {
     final int mark = readMark(stream);
     final PersonIdent author = readIdent(stream, "author");
     final PersonIdent committer = readIdent(stream, "committer");
@@ -316,7 +316,7 @@ class MarkRegistry {
   }
 
   void readTag(InputStream stream, ObjectInserter inserter,
-      InMemoryRepository repository, String tagName) throws IOException {
+      Repository repository, String tagName) throws IOException {
     String line = readLine(stream);
     Integer markNum = null;
     if (line != null && line.startsWith("mark :")) {
