@@ -68,7 +68,7 @@ public class GitConfigTests {
 
   @Test
   void testClearConfig(@TempDir Path tempDir) throws Exception {
-    FactoGit.clearConfig();
+    SystemReader.setInstance(new EmptyConfigSystemReader());
     try (Git git = Git.init().setDirectory(tempDir.toFile()).call()) {
       StoredConfig config = git.getRepository().getConfig();
       assertEquals(ImmutableSet.of("core"), config.getSections());
