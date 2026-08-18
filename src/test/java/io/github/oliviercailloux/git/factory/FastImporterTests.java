@@ -27,7 +27,7 @@ import org.junit.jupiter.api.Test;
 public class FastImporterTests {
   @Test
   void testBasic() throws Exception {
-    try (DfsRepository repo = FastImporter.toDfs().importRepository(Resourcer.charSource("single-commit.fast-export"));
+    try (DfsRepository repo = FastImporter.toDfs("").importRepository(Resourcer.charSource("single-commit.fast-export"));
         Git git = Git.wrap(repo)) {
       final RevCommit commit = Iterables.getOnlyElement(git.log().call());
       assertEquals(0, commit.getParentCount());
@@ -60,7 +60,7 @@ public class FastImporterTests {
 
   @Test
   void testTwoCommits() throws Exception {
-    try (DfsRepository repo = FastImporter.toDfs().importRepository(Resourcer.charSource("two-commits.fast-export"));
+    try (DfsRepository repo = FastImporter.toDfs("").importRepository(Resourcer.charSource("two-commits.fast-export"));
         Git git = Git.wrap(repo)) {
       final ImmutableList<RevCommit> commits = ImmutableList.copyOf(git.log().call());
       assertEquals(2, commits.size());
@@ -108,7 +108,7 @@ public class FastImporterTests {
 
   @Test
   void testSubdirTimezone() throws Exception {
-    try (DfsRepository repo = FastImporter.toDfs().importRepository(Resourcer.charSource("subdir-timezone.fast-export"));
+    try (DfsRepository repo = FastImporter.toDfs("").importRepository(Resourcer.charSource("subdir-timezone.fast-export"));
         Git git = Git.wrap(repo)) {
       final RevCommit commit = Iterables.getOnlyElement(git.log().call());
       assertEquals(ZoneOffset.ofHours(2), commit.getAuthorIdent().getZoneOffset());
@@ -137,7 +137,7 @@ public class FastImporterTests {
 
   @Test
   void testExecutableMode() throws Exception {
-    try (DfsRepository repo = FastImporter.toDfs().importRepository(Resourcer.charSource("executable-mode.fast-export"));
+    try (DfsRepository repo = FastImporter.toDfs("").importRepository(Resourcer.charSource("executable-mode.fast-export"));
         Git git = Git.wrap(repo)) {
       final RevCommit commit = Iterables.getOnlyElement(git.log().call());
 
@@ -157,7 +157,7 @@ public class FastImporterTests {
 
   @Test
   void testTwoBranches() throws Exception {
-    try (DfsRepository repo = FastImporter.toDfs().importRepository(Resourcer.charSource("two-branches.fast-export"))) {
+    try (DfsRepository repo = FastImporter.toDfs("").importRepository(Resourcer.charSource("two-branches.fast-export"))) {
       final ObjectId mainId = repo.resolve("refs/heads/main");
       final ObjectId featureId = repo.resolve("refs/heads/feature");
       assertNotNull(mainId);
@@ -180,7 +180,7 @@ public class FastImporterTests {
 
   @Test
   void testMergeCommit() throws Exception {
-    try (DfsRepository repo = FastImporter.toDfs().importRepository(Resourcer.charSource("merge-commit.fast-export"));
+    try (DfsRepository repo = FastImporter.toDfs("").importRepository(Resourcer.charSource("merge-commit.fast-export"));
         Git git = Git.wrap(repo)) {
       final ObjectId mainId = repo.resolve("refs/heads/main");
       final ObjectId featureId = repo.resolve("refs/heads/feature");
@@ -213,7 +213,7 @@ public class FastImporterTests {
 
   @Test
   void testDistinctCommitter() throws Exception {
-    try (DfsRepository repo = FastImporter.toDfs().importRepository(Resourcer.charSource("distinct-committer.fast-export"));
+    try (DfsRepository repo = FastImporter.toDfs("").importRepository(Resourcer.charSource("distinct-committer.fast-export"));
         Git git = Git.wrap(repo)) {
       final RevCommit commit = Iterables.getOnlyElement(git.log().call());
       final PersonIdent author = commit.getAuthorIdent();
@@ -229,7 +229,7 @@ public class FastImporterTests {
 
   @Test
   void testMultilevelDir() throws Exception {
-    try (DfsRepository repo = FastImporter.toDfs().importRepository(Resourcer.charSource("multilevel-dir.fast-export"));
+    try (DfsRepository repo = FastImporter.toDfs("").importRepository(Resourcer.charSource("multilevel-dir.fast-export"));
         Git git = Git.wrap(repo)) {
       final RevCommit commit = Iterables.getOnlyElement(git.log().call());
       try (TreeWalk treeWalk = new TreeWalk(repo)) {
@@ -247,7 +247,7 @@ public class FastImporterTests {
 
   @Test
   void testEncoding() throws Exception {
-    try (DfsRepository repo = FastImporter.toDfs().importRepository(Resourcer.charSource("encoding.fast-export"));
+    try (DfsRepository repo = FastImporter.toDfs("").importRepository(Resourcer.charSource("encoding.fast-export"));
         Git git = Git.wrap(repo)) {
       final RevCommit commit = Iterables.getOnlyElement(git.log().call());
       assertEquals("Encoded commit\n", commit.getFullMessage());
@@ -257,7 +257,7 @@ public class FastImporterTests {
 
   @Test
   void testSymlink() throws Exception {
-    try (DfsRepository repo = FastImporter.toDfs().importRepository(Resourcer.charSource("symlink.fast-export"));
+    try (DfsRepository repo = FastImporter.toDfs("").importRepository(Resourcer.charSource("symlink.fast-export"));
         Git git = Git.wrap(repo)) {
       final RevCommit commit = Iterables.getOnlyElement(git.log().call());
       try (TreeWalk treeWalk = new TreeWalk(repo)) {
@@ -278,7 +278,7 @@ public class FastImporterTests {
 
   @Test
   void testAnnotatedTag() throws Exception {
-    try (DfsRepository repo = FastImporter.toDfs().importRepository(Resourcer.charSource("annotated-tag.fast-export"))) {
+    try (DfsRepository repo = FastImporter.toDfs("").importRepository(Resourcer.charSource("annotated-tag.fast-export"))) {
       final ObjectId tagRefId = repo.resolve("refs/tags/v1.0");
       assertNotNull(tagRefId);
       try (RevWalk rw = new RevWalk(repo)) {
@@ -295,7 +295,7 @@ public class FastImporterTests {
 
   @Test
   void testGitlink() throws Exception {
-    try (DfsRepository repo = FastImporter.toDfs().importRepository(Resourcer.charSource("gitlink.fast-export"));
+    try (DfsRepository repo = FastImporter.toDfs("").importRepository(Resourcer.charSource("gitlink.fast-export"));
         Git git = Git.wrap(repo)) {
       final RevCommit commit = Iterables.getOnlyElement(git.log().call());
       try (TreeWalk treeWalk = new TreeWalk(repo)) {
@@ -326,7 +326,7 @@ public class FastImporterTests {
 
   @Test
   void testUnicode() throws Exception {
-    try (DfsRepository repo = FastImporter.toDfs().importRepository(Resourcer.byteSource("unicode.fast-export"));
+    try (DfsRepository repo = FastImporter.toDfs("").importRepository(Resourcer.byteSource("unicode.fast-export"));
         Git git = Git.wrap(repo)) {
       final RevCommit commit = Iterables.getOnlyElement(git.log().call());
       try (TreeWalk treeWalk = new TreeWalk(repo)) {
@@ -345,7 +345,7 @@ public class FastImporterTests {
   @Test
   void testPatchModifyDelete() throws Exception {
     try (DfsRepository repo =
-        FastImporter.toDfs().importRepository(Resourcer.charSource("patch-modify-delete.fast-export"));
+        FastImporter.toDfs("").importRepository(Resourcer.charSource("patch-modify-delete.fast-export"));
         Git git = Git.wrap(repo)) {
       final ImmutableList<RevCommit> commits = ImmutableList.copyOf(git.log().call());
       assertEquals(2, commits.size());
@@ -389,7 +389,7 @@ public class FastImporterTests {
   @Test
   void testPatchRename() throws Exception {
     try (DfsRepository repo =
-        FastImporter.toDfs().importRepository(Resourcer.charSource("patch-rename.fast-export"));
+        FastImporter.toDfs("").importRepository(Resourcer.charSource("patch-rename.fast-export"));
         Git git = Git.wrap(repo)) {
       final ImmutableList<RevCommit> commits = ImmutableList.copyOf(git.log().call());
       assertEquals(2, commits.size());
@@ -421,7 +421,7 @@ public class FastImporterTests {
 
   @Test
   void testTreeOrder() throws Exception {
-    try (DfsRepository repo = FastImporter.toDfs().importRepository(Resourcer.charSource("tree-order.fast-export"));
+    try (DfsRepository repo = FastImporter.toDfs("").importRepository(Resourcer.charSource("tree-order.fast-export"));
         Git git = Git.wrap(repo)) {
       final RevCommit second = git.log().call().iterator().next();
       try (TreeWalk treeWalk = new TreeWalk(repo)) {
@@ -439,7 +439,7 @@ public class FastImporterTests {
   @Test
   void testTreeOrderDirectoryVersusFile() throws Exception {
     try (DfsRepository repo =
-        FastImporter.toDfs().importRepository(Resourcer.charSource("tree-order-dir-vs-file.fast-export"));
+        FastImporter.toDfs("").importRepository(Resourcer.charSource("tree-order-dir-vs-file.fast-export"));
         Git git = Git.wrap(repo)) {
       final RevCommit commit = Iterables.getOnlyElement(git.log().call());
       try (TreeWalk treeWalk = new TreeWalk(repo)) {
@@ -459,7 +459,7 @@ public class FastImporterTests {
   @Test
   void testFromBranchName() throws Exception {
     try (DfsRepository repo =
-        FastImporter.toDfs().importRepository(Resourcer.charSource("from-branch-name.fast-export"));
+        FastImporter.toDfs("").importRepository(Resourcer.charSource("from-branch-name.fast-export"));
         Git git = Git.wrap(repo)) {
       final ImmutableList<RevCommit> commits = ImmutableList.copyOf(git.log().call());
       assertEquals(2, commits.size());
@@ -484,7 +484,7 @@ public class FastImporterTests {
   @Test
   void testLightweightTag() throws Exception {
     try (DfsRepository repo =
-        FastImporter.toDfs().importRepository(Resourcer.charSource("lightweight-tag.fast-export"))) {
+        FastImporter.toDfs("").importRepository(Resourcer.charSource("lightweight-tag.fast-export"))) {
       final ObjectId mainId = repo.resolve("refs/heads/main");
       final ObjectId tagId = repo.resolve("refs/tags/v1.0-lw");
       assertNotNull(tagId);
@@ -498,7 +498,7 @@ public class FastImporterTests {
   @Test
   void testResetDeletesBranch() throws Exception {
     try (DfsRepository repo =
-        FastImporter.toDfs().importRepository(Resourcer.charSource("reset-delete-branch.fast-export"))) {
+        FastImporter.toDfs("").importRepository(Resourcer.charSource("reset-delete-branch.fast-export"))) {
       assertNotNull(repo.resolve("refs/heads/main"));
       assertNull(repo.resolve("refs/heads/doomed"));
     }
@@ -507,7 +507,7 @@ public class FastImporterTests {
   @Test
   void testPatchRenameQuoted() throws Exception {
     try (DfsRepository repo =
-        FastImporter.toDfs().importRepository(Resourcer.charSource("patch-rename-quoted.fast-export"));
+        FastImporter.toDfs("").importRepository(Resourcer.charSource("patch-rename-quoted.fast-export"));
         Git git = Git.wrap(repo)) {
       final ImmutableList<RevCommit> commits = ImmutableList.copyOf(git.log().call());
       final RevCommit second = commits.get(0);
@@ -527,7 +527,7 @@ public class FastImporterTests {
   @Test
   void testQuotedPathWithSpace() throws Exception {
     try (DfsRepository repo =
-        FastImporter.toDfs().importRepository(Resourcer.charSource("quoted-path.fast-export"));
+        FastImporter.toDfs("").importRepository(Resourcer.charSource("quoted-path.fast-export"));
         Git git = Git.wrap(repo)) {
       final RevCommit commit = Iterables.getOnlyElement(git.log().call());
       try (TreeWalk treeWalk = new TreeWalk(repo)) {
@@ -545,36 +545,36 @@ public class FastImporterTests {
   @Test
   void testUnrecognizedCommandFailsFast() {
     assertThrows(RuntimeException.class, () -> FastImporter
-        .toDfs().importRepository(Resourcer.charSource("unrecognized-command.fast-export")));
+        .toDfs("").importRepository(Resourcer.charSource("unrecognized-command.fast-export")));
   }
 
   @Test
   void testAliasCommandFailsFast() {
     assertThrows(RuntimeException.class,
-        () -> FastImporter.toDfs().importRepository(Resourcer.charSource("alias-command.fast-export")));
+        () -> FastImporter.toDfs("").importRepository(Resourcer.charSource("alias-command.fast-export")));
   }
 
   @Test
   void testNotemodifyFailsFast() {
     assertThrows(RuntimeException.class,
-        () -> FastImporter.toDfs().importRepository(Resourcer.charSource("notemodify.fast-export")));
+        () -> FastImporter.toDfs("").importRepository(Resourcer.charSource("notemodify.fast-export")));
   }
 
   @Test
   void testInlineFilemodifyFailsFast() {
     assertThrows(RuntimeException.class, () -> FastImporter
-        .toDfs().importRepository(Resourcer.charSource("inline-filemodify.fast-export")));
+        .toDfs("").importRepository(Resourcer.charSource("inline-filemodify.fast-export")));
   }
 
   @Test
   void testShorthandModeFailsFast() {
     assertThrows(RuntimeException.class,
-        () -> FastImporter.toDfs().importRepository(Resourcer.charSource("shorthand-mode.fast-export")));
+        () -> FastImporter.toDfs("").importRepository(Resourcer.charSource("shorthand-mode.fast-export")));
   }
 
   @Test
   void testDelimitedDataFailsFast() {
     assertThrows(RuntimeException.class,
-        () -> FastImporter.toDfs().importRepository(Resourcer.charSource("delimited-data.fast-export")));
+        () -> FastImporter.toDfs("").importRepository(Resourcer.charSource("delimited-data.fast-export")));
   }
 }

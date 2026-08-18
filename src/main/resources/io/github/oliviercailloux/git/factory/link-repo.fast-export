@@ -1,0 +1,87 @@
+blob
+mark :1
+data 12
+Hello, world
+
+blob
+mark :2
+data 9
+/absolute
+
+blob
+mark :3
+data 9
+file1.txt
+
+reset refs/heads/main
+commit refs/heads/main
+mark :4
+author Me <me@example.com> 1000000000 +0000
+committer Me <me@example.com> 1000000000 +0000
+data 12
+First commit
+deleteall
+M 120000 :2 "absolute link"
+M 100644 :1 file1.txt
+M 120000 :3 link.txt
+
+blob
+mark :5
+data 13
+Hello instead
+
+commit refs/heads/main
+mark :6
+author Me <me@example.com> 1000003600 +0000
+committer Me <me@example.com> 1000003600 +0000
+data 13
+Second commit
+from :4
+deleteall
+M 120000 :2 "absolute link"
+M 100644 :5 file1.txt
+M 120000 :3 link.txt
+
+blob
+mark :7
+data 11
+../link.txt
+
+blob
+mark :8
+data 2
+..
+
+blob
+mark :9
+data 18
+../dir/cyclingLink
+
+commit refs/heads/main
+mark :10
+author Me <me@example.com> 1000007200 +0000
+committer Me <me@example.com> 1000007200 +0000
+data 12
+Third commit
+from :6
+deleteall
+M 120000 :2 "absolute link"
+M 120000 :9 dir/cyclingLink
+M 120000 :7 dir/link
+M 120000 :8 dir/linkToParent
+M 100644 :5 file1.txt
+M 120000 :3 link.txt
+
+commit refs/heads/main
+mark :11
+author Me <me@example.com> 1000010800 +0000
+committer Me <me@example.com> 1000010800 +0000
+data 13
+Fourth commit
+from :10
+deleteall
+M 120000 :2 "absolute link"
+M 120000 :9 dir/cyclingLink
+M 120000 :7 dir/link
+M 120000 :8 dir/linkToParent
+M 120000 :3 link.txt

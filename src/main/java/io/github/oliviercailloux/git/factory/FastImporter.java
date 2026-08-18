@@ -5,6 +5,7 @@ import static com.google.common.base.Verify.verify;
 import com.google.common.io.ByteSource;
 import com.google.common.io.CharSource;
 import com.google.common.io.Resources;
+import io.github.oliviercailloux.jaris.throwing.TSupplier;
 import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.IOException;
@@ -15,7 +16,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.eclipse.jgit.internal.storage.dfs.DfsRepository;
-import org.eclipse.jgit.internal.storage.dfs.DfsRepositoryBuilder;
 import org.eclipse.jgit.internal.storage.dfs.DfsRepositoryDescription;
 import org.eclipse.jgit.internal.storage.dfs.InMemoryRepository;
 import org.eclipse.jgit.internal.storage.file.FileRepository;
@@ -28,48 +28,25 @@ import org.eclipse.jgit.lib.RefUpdate;
 import org.eclipse.jgit.lib.RefUpdate.Result;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.lib.TreeFormatter;
+import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
 
 public class FastImporter<R extends Repository> {
-  /** Builds an {@link InMemoryRepository}, typed as {@link DfsRepository}. */
-  private static final class DfsBuilder
-      extends DfsRepositoryBuilder<DfsBuilder, DfsRepository> {
-    @Override
-    public DfsRepository build() throws IOException {
-      DfsRepositoryDescription desc = getRepositoryDescription();
-      return new InMemoryRepository(desc != null ? desc : new DfsRepositoryDescription(""));
-    }
-  }
-
-  /** Builds a {@link FileRepository}. Set a git dir via {@link #setGitDir} before calling {@link #build}. */
-  private static final class FileBuilder
-      extends BaseRepositoryBuilder<FileBuilder, FileRepository> {
-    @Override
-    public FileRepository build() throws IOException {
-      return new FileRepository(this);
-    }
-  }
-
-  @FunctionalInterface
-  private interface RepositoryFactory<R extends Repository> {
-    R create() throws IOException;
-  }
-
-  /** Default instance that builds each call into a fresh {@link InMemoryRepository}. */
-  private static final FastImporter<DfsRepository> DFS_BUILDER =
-      new FastImporter<>(() -> new InMemoryRepository(new DfsRepositoryDescription("")));
-
-  /** Returns the default instance that builds into a fresh {@link DfsRepository}. */
-  public static FastImporter<DfsRepository> toDfs() {
-    return DFS_BUILDER;
+  /** Returns an instance that builds into a fresh {@link DfsRepository} named {@code name}. */
+  public static FastImporter<DfsRepository> toDfs(String name) {
+    return using(() -> new InMemoryRepository(new DfsRepositoryDescription(name)));
   }
 
   /** Returns an instance that builds into a fresh {@link FileRepository} rooted at {@code gitDir}. */
   public static FastImporter<FileRepository> toFile(File gitDir) {
-    return using(new FileBuilder().setGitDir(gitDir));
+    return using(() -> (FileRepository) new FileRepositoryBuilder().setGitDir(gitDir).build());
   }
 
   public static <R extends Repository> FastImporter<R> using(BaseRepositoryBuilder<?, R> builder) {
-    return new FastImporter<>(builder::build);
+    return using(builder::build);
+  }
+
+  public static <R extends Repository> FastImporter<R> using(TSupplier<R, IOException> factory) {
+    return new FastImporter<>(factory);
   }
 
   private static boolean isHarmlessTopLevelCommand(String line) {
@@ -148,9 +125,9 @@ public class FastImporter<R extends Repository> {
     }
   }
 
-  private final RepositoryFactory<R> factory;
+  private final TSupplier<R, IOException> factory;
 
-  private FastImporter(RepositoryFactory<R> factory) {
+  private FastImporter(TSupplier<R, IOException> factory) {
     this.factory = factory;
   }
 
@@ -159,7 +136,7 @@ public class FastImporter<R extends Repository> {
    * this instance's factory.
    */
   public R importRepository(ByteSource source) throws IOException {
-    R repository = factory.create();
+    R repository = factory.get();
     repository.create(true);
 
     final MarkRegistry registry = MarkRegistry.create();
@@ -231,5 +208,15 @@ public class FastImporter<R extends Repository> {
    */
   public R linked() throws IOException {
     return importRepository(bundled("linked.fast-export"));
+  }
+
+  /**
+   * A 4-commit line matching the structure of the deprecated {@code JGit#createRepoWithLink}: a
+   * regular file, a relative symlink, and an absolute symlink; then the regular file modified; then
+   * a subdirectory of relative symlinks (one self-cycling, one to parent); then the regular file
+   * deleted leaving a dangling link.
+   */
+  public R linkRepo() throws IOException {
+    return importRepository(bundled("link-repo.fast-export"));
   }
 }
