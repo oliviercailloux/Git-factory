@@ -5,6 +5,13 @@ Utilities for creating in-memory JGit repositories programmatically, primarily f
 == Alternatives
 Eclipse jgit provides TestRepository that wraps an existing repository and permits to create commits on it.
 
+== Porcelain vs plumbing, and exception types
+`GitCloner` sits at the *porcelain* layer: it drives `org.eclipse.jgit.api.*Command` (`CloneCommand`, `FetchCommand`), the JGit façade mirroring git's user-facing commands. Porcelain commands can fail for git-workflow reasons that have nothing to do with I/O — no HEAD, wrong repository state, invalid remote, checkout conflicts, transport errors — so every `Command#call()` declares the checked `GitAPIException` (which `extends Exception`, not `IOException`), with ~30 subclasses (`NoHeadException`, `WrongRepositoryStateException`, `InvalidRemoteException`, `TransportException`, …) for each failure kind.
+
+`FastImporter` (and the now-deleted `JGit` class) sits at the *plumbing* layer instead: `RevWalk`, `TreeWalk`, `ObjectInserter`/`ObjectReader`, `Repository`, reading and writing objects directly. Its failure modes are storage-level, so it only throws `IOException` (and JGit's `IOException` subclasses — `MissingObjectException`, `CorruptObjectException`, `IncorrectObjectTypeException`) — never `GitAPIException`, since no porcelain `Command` is ever involved.
+
+A method mixing both layers (e.g. `GitReadTests#download()`, which clones via `CloneCommand` and does raw `Files` I/O) accordingly declares `throws GitAPIException, IOException`.
+
 == Repository backends
 `FastImporter` supports two backends via its factory methods: `toDfs()` builds into a fresh in-memory `InMemoryRepository` (the default, suitable for most tests), and `toFile(File gitDir)` builds directly into a bare `FileRepository` at the supplied git dir (for cases where the result must be addressable as a path or outlive the JVM process).
 
@@ -21,26 +28,3 @@ It does not cover the full `git fast-import` stream format. Constructs outside t
 
 == Built-in DAG fixtures
 `FastImporter.toDfs().single()`, `FastImporter.toDfs().dual()`, `FastImporter.toDfs().sub()`, and `FastImporter.toDfs().linked()` build ready-made repositories from `.fast-export` files bundled under `src/main/resources/…`, reproducing the topologies of the deprecated `FactoGit#setBasicDag()`/`setSubDag()`/`setLinkedDag()` and of `JGit#createBasicRepo(Repository)` (single commit with two files; a 2-commit line growing from one file to two; a 3-commit line ending in a subdirectory; a 4-commit line exercising relative/absolute/cyclic/dangling symlinks). Content matches the legacy fixtures commit-by-commit (verified by `LegacyDagFixturesTests`, modulo a trailing newline the legacy `Files.writeString` calls don't add); identities and timestamps are deterministic fixed values instead of the legacy empty-identity/current-time defaults, since those were incidental, not part of the fixture's shape.
-
-== Status of the deprecated `FactoGit` and `JGit` classes
-`FactoGit` and `JGit` predate `FactoGitNew`/`FastImporter` and are marked `@Deprecated`. Whether they can be deleted was checked against every consumer of this library findable under the parent `Git/` folder (and, for safety, the whole `Programmation/Java` tree): `GitJFS` and `GitJFS filter` are the only two. All uses of `FactoGit`/`JGit` in those two projects are confined to test code (never `src/main`), across 33 call sites in 7 test files.
-
-* *`FactoGit` is safe to remove.* Every use is the built-in-fixture mode (`FactoGit.empty(); facto.setSubDag(); facto.build();`, 6 occurrences), none of its general-purpose features (custom `Graph<Path>`, `setIdentConstant`/`setIdentIncreasing`, `setLinks`, the `createRepository(...)` overloads) are exercised by these consumers. `FastImporter.toDfs().sub()`/`toDfs().single()`/`toDfs().linked()` are drop-in, more elegant replacements (one-liners instead of three statements), already proven equivalent by `LegacyDagFixturesTests`.
-* *`JGit`'s one remaining exclusive capability — building into a disk-backed `FileRepository` — is now covered by `FastImporter.toFile(File gitDir)`.* The three `GitJFS` call sites that forced `FileRepository` each do so because the result must outlive the call and be addressable by `Path`: `GitFileSystemCreationAndUriTests#initGitRepo()` and `GitReadTests#testFindSmall()` close and reopen the repo from disk to exercise the path-based `gitjfs://FILE` URI entry point, and `GitReadTests#main()` builds at a fixed path (`/tmp/ploum/.git`) for manual inspection. All three can now be replaced with a one-liner such as `FastImporter.toFile(dir.toFile()).sub()`, which bare-initializes a `FileRepository` at `dir` and imports the fixture into it directly. Note though that I have my doubts that this uri stuff is correct, it should be reworked anyway.
-* *The topology gap is closed:* `JGit.createBasicRepo(Repository)` produced two commits (`file1.txt`, then `+file2.txt`), which had no equivalent — `FastImporter.toDfs().single()` was single-commit, matching `FactoGit#setBasicDag()` instead. `FastImporter.toDfs().dual()` now reproduces that 2-commit topology exactly (verified by `LegacyDagFixturesTests#testDualMatchesLegacy`), so this is no longer a blocker for the `JGit` call sites that only needed the topology, not the "populate an existing `Repository`" capability.
-* *Minor remaining friction:* `JGit.createBasicRepo`/`createRepoWithSubDir`/`createRepoWithLink` hand back the created commits as an ordered `ImmutableList<ObjectId>`, which ~27 call sites use directly (`commits.get(n)`). `FastImporter.toDfs().single()`/`dual()`/`sub()`/`linked()` return only a bare `DfsRepository`; callers must recover the ordered ids themselves (a `RevWalk` with `RevSort.TOPO`/`REVERSE`, or read them back off a constructed `GitFileSystem`'s `graph()`, as some consumer tests already do). More code, one more layer of indirection, but not a hard blocker.
-
-Net: both `FactoGit` and `JGit` can be deleted now — `FactoGit` because its fixture use cases are drop-in replaced by `FastImporter.toDfs().*`, and `JGit` because `FastImporter.toFile(File)` now covers disk-backed repository construction directly. `GitJFS` has been partially migrated: all `FastImporter` call sites (one in `src/main`, three in tests) now use `toDfs()` and compile against `0.0.8-SNAPSHOT`, but tests still use `JGit` (25 call sites in 4 files; no `FactoGit`). `GitJFS filter` has not been migrated at all: it still pins `git-factory 0.0.7` and still uses `FactoGit` (6 call sites in 3 files) and `JGit` (2 call sites in `GitPruningFsTests`).
-
-== Migration plan
-
-=== Round 1: delete `FactoGit`
-
-. Migrate `GitJFS filter` off `FactoGit` (bump to `0.0.8-SNAPSHOT`; replace each `FactoGit.empty(); facto.set*Dag(); facto.build()` triple in `TwoTraitsTests`, `GitDaterFsTests`, and `GitPruningFsTests` with the matching `FastImporter.toDfs().single()`/`sub()`/`linked()`). `GitJFS` uses no `FactoGit`, so needs no change.
-. Delete `FactoGit` from this library and reinstall.
-
-=== Round 2: delete `JGit`
-
-. Migrate `GitJFS` off `JGit`: replace the 25 `JGit.createRepoWith*`/`createBasicRepo` calls across `GitDiffTests` (1), `GitPathInternalTests` (1), `GitFileSystemCreationAndUriTests` (4), and `GitReadTests` (19, including `main()`) with `FastImporter.toFile(gitDir).*` or `FastImporter.toDfs().*` as appropriate; where the returned `ImmutableList<ObjectId>` is consumed by the caller, derive the ordered commit ids via RevWalk after importing.
-. Migrate `GitJFS filter` off `JGit`: replace the 2 `JGit.createRepoWithSubDir` calls in `GitPruningFsTests` with `FastImporter.toFile(gitDir).sub()`, recovering commit ids via RevWalk where needed.
-. Delete `JGit` from this library and reinstall.
