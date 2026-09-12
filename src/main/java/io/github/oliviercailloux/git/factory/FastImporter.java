@@ -43,10 +43,29 @@ public class FastImporter<R extends Repository> {
     return using(() -> (FileRepository) new FileRepositoryBuilder().setGitDir(gitDir).build());
   }
 
+  /**
+   * Returns an instance that builds into a new repository created by the given builder.
+   * <p>
+   * The repository is created bare iff the builder is configured as bare.
+   * <p>
+   * Make sure the target directory set in the builder is empty (or non-existent) when calling
+   * {@link FastImporter#importRepository}, otherwise the resulting repository could be in an inconsistent
+   * state (the creation step does fail in some cases when the existing directory looks like an
+   * existing repository, but not in all cases).
+   *
+   * @param builder a builder configured as desired, but not yet built. No need to call
+   *        {@link BaseRepositoryBuilder#setup()} or {@link BaseRepositoryBuilder#build()}: the
+   *        repository will be built (then created, thus, initialized) by the importer.
+   */
   public static <R extends Repository> FastImporter<R> using(BaseRepositoryBuilder<?, R> builder) {
     return using(builder::build);
   }
 
+  /**
+   * @param factory a supplier that creates a new, uninitialized repository, similar to what
+   *        {@link BaseRepositoryBuilder#build()} does. The repository will be created (thus,
+   *        initialized) by the importer.
+   */
   public static <R extends Repository> FastImporter<R> using(TSupplier<R, IOException> factory) {
     return new FastImporter<>(factory);
   }
@@ -140,7 +159,11 @@ public class FastImporter<R extends Repository> {
    */
   public R importRepository(ByteSource source) throws IOException {
     R repository = factory.get();
-    repository.create(true);
+    /*
+     * BaseRepositoryBuilder#build() creates a new, uninitialized repository; repo#create() sets up
+     * the default branch, refs… (See https://github.com/eclipse-jgit/jgit/issues/297)
+     */
+    repository.create(repository.isBare());
 
     final MarkRegistry registry = MarkRegistry.create();
 
