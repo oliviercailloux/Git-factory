@@ -15,7 +15,7 @@ import java.util.Iterator;
 import java.util.function.Function;
 
 /**
- * Provides a {@link TFunction} from {@link Path} to {@code T}, either directly (via
+ * Provides, when given a graph of paths, a {@link TFunction} from {@link Path} to {@code T}, either directly (via
  * {@link #function}) or by assigning values from an {@link Iterable} to nodes visited in
  * breadth-first order over a given graph (via {@link #onBreadthFirst}).
  *
@@ -50,15 +50,10 @@ class OnDemandFunctionOfPath<T> {
   }
 
   /**
-   * Non-null iff created via {@link #function}. Exactly one of {@code f} and {@code values} is
-   * non-null.
+   * Non-null iff {@code values} is
+   * null.
    */
   private final TFunction<Path, T, IOException> f;
-
-  /**
-   * Non-null iff created via {@link #onBreadthFirst}. Exactly one of {@code f} and {@code values}
-   * is non-null.
-   */
   private final Iterable<T> values;
 
   private OnDemandFunctionOfPath(TFunction<Path, T, IOException> f, Iterable<T> values) {
