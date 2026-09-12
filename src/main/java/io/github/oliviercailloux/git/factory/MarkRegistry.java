@@ -52,6 +52,12 @@ class MarkRegistry {
     return buf.toString(StandardCharsets.US_ASCII);
   }
 
+  private static String readLineRequired(InputStream stream) throws IOException {
+    final String line = readLine(stream);
+    checkState(line != null, "Unexpected end of stream");
+    return line;
+  }
+
   private static byte[] readExactlyBytes(InputStream stream, int length) throws IOException {
     final byte[] buf = stream.readNBytes(length);
     checkState(buf.length == length, "Expected %s bytes, got %s", length, buf.length);
@@ -67,12 +73,12 @@ class MarkRegistry {
   }
 
   private static int readDataLength(InputStream stream) throws IOException {
-    return parseDataLength(readLine(stream));
+    return parseDataLength(readLineRequired(stream));
   }
 
   private static int readMark(InputStream stream) throws IOException {
-    final String line = readLine(stream);
-    checkState(line != null && line.startsWith("mark :"), "Expected mark line, got: %s", line);
+    final String line = readLineRequired(stream);
+    checkState(line.startsWith("mark :"), "Expected mark line, got: %s", line);
     return Integer.parseInt(line.substring("mark :".length()));
   }
 
@@ -87,9 +93,8 @@ class MarkRegistry {
   }
 
   private static PersonIdent readIdent(InputStream stream, String prefix) throws IOException {
-    final String line = readLine(stream);
-    checkState(line != null && line.startsWith(prefix + " "), "Expected %s line, got: %s", prefix,
-        line);
+    final String line = readLineRequired(stream);
+    checkState(line.startsWith(prefix + " "), "Expected %s line, got: %s", prefix, line);
     return parseIdent(line.substring(prefix.length() + 1));
   }
 
@@ -246,36 +251,36 @@ class MarkRegistry {
     final int mark = readMark(stream);
     final PersonIdent author = readIdent(stream, "author");
     final PersonIdent committer = readIdent(stream, "committer");
-    String line = readLine(stream);
-    if (line != null && line.startsWith("encoding ")) {
-      line = readLine(stream);
+    String line = readLineRequired(stream);
+    if (line.startsWith("encoding ")) {
+      line = readLineRequired(stream);
     }
     final int msgLength = parseDataLength(line);
     final String message = new String(readExactlyBytes(stream, msgLength), StandardCharsets.UTF_8);
 
-    line = readLine(stream);
+    line = readLineRequired(stream);
     /*
      * Official format doc (https://git-scm.com/docs/git-fast-import#_data): trailing LF after <raw>
      * is optional and not counted in the byte count; skip any such blank lines.
      */
     while ("".equals(line)) {
-      line = readLine(stream);
+      line = readLineRequired(stream);
     }
     final List<ObjectId> parents = new ArrayList<>();
     ObjectId firstParent = null;
-    if (line != null && line.startsWith("from ")) {
+    if (line.startsWith("from ")) {
       firstParent = resolveCommitish(repository, line.substring("from ".length()));
       parents.add(firstParent);
-      line = readLine(stream);
+      line = readLineRequired(stream);
     }
-    while (line != null && line.startsWith("merge ")) {
+    while (line.startsWith("merge ")) {
       parents.add(resolveCommitish(repository, line.substring("merge ".length())));
-      line = readLine(stream);
+      line = readLineRequired(stream);
     }
 
     final Map<String, MEntry> files = new LinkedHashMap<>();
     if ("deleteall".equals(line)) {
-      line = readLine(stream);
+      line = readLineRequired(stream);
     } else if (firstParent != null) {
       files.putAll(filesOf(repository, firstParent));
     }
@@ -319,20 +324,20 @@ class MarkRegistry {
 
   void readTag(InputStream stream, ObjectInserter inserter, Repository repository, String tagName)
       throws IOException {
-    String line = readLine(stream);
+    String line = readLineRequired(stream);
     Integer markNum = null;
-    if (line != null && line.startsWith("mark :")) {
+    if (line.startsWith("mark :")) {
       markNum = Integer.parseInt(line.substring("mark :".length()));
-      line = readLine(stream);
+      line = readLineRequired(stream);
     }
-    checkState(line != null && line.startsWith("from "), "Expected from in tag, got: %s", line);
+    checkState(line.startsWith("from "), "Expected from in tag, got: %s", line);
     final ObjectId taggedId = resolveCommitish(repository, line.substring("from ".length()));
 
-    line = readLine(stream);
+    line = readLineRequired(stream);
     PersonIdent tagger = null;
-    if (line != null && line.startsWith("tagger ")) {
+    if (line.startsWith("tagger ")) {
       tagger = parseIdent(line.substring("tagger ".length()));
-      line = readLine(stream);
+      line = readLineRequired(stream);
     }
 
     final int msgLength = parseDataLength(line);
