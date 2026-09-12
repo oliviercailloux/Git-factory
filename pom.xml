@@ -4,7 +4,7 @@
   <parent>
     <groupId>io.github.oliviercailloux</groupId>
     <artifactId>pom</artifactId>
-    <version>0.0.30</version>
+    <version>0.0.31</version>
   </parent>
   <groupId>io.github.oliviercailloux.git</groupId>
   <artifactId>git-factory</artifactId>
@@ -33,12 +33,12 @@
     <dependency>
       <groupId>org.eclipse.jgit</groupId>
       <artifactId>org.eclipse.jgit</artifactId>
-      <version>7.2.1.202505142326-r</version>
+      <version>7.7.1.202607240634-r</version>
     </dependency>
     <dependency>
       <groupId>org.eclipse.jgit</groupId>
       <artifactId>org.eclipse.jgit.ssh.apache</artifactId>
-      <version>7.2.1.202505142326-r</version>
+      <version>7.7.1.202607240634-r</version>
       <scope>runtime</scope>
     </dependency>
   </dependencies>
