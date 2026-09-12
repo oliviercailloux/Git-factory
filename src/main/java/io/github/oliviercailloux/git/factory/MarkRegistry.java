@@ -110,9 +110,9 @@ class MarkRegistry {
   }
 
   /**
-   * Returns the index right after the path token starting at {@code start}: past the closing
-   * quote if the token is quoted, otherwise the index of the next space (or end of string).
-   * Unquoted tokens cannot contain a space, per the fast-import format.
+   * Returns the index right after the path token starting at {@code start}: past the closing quote
+   * if the token is quoted, otherwise the index of the next space (or end of string). Unquoted
+   * tokens cannot contain a space, per the fast-import format.
    */
   private static int pathTokenEnd(String s, int start) {
     if (s.charAt(start) == '"') {
@@ -195,11 +195,10 @@ class MarkRegistry {
 
   /**
    * Resolves a fast-import {@code <commit-ish>}: a mark reference ({@code :N}), or else anything
-   * JGit's own revision resolution understands — a branch/tag name, a full or abbreviated SHA-1,
-   * a {@code ^0}-style suffix, and so on.
+   * JGit's own revision resolution understands — a branch/tag name, a full or abbreviated SHA-1, a
+   * {@code ^0}-style suffix, and so on.
    */
-  private ObjectId resolveCommitish(Repository repository, String commitish)
-      throws IOException {
+  private ObjectId resolveCommitish(Repository repository, String commitish) throws IOException {
     if (commitish.startsWith(":")) {
       final ObjectId oid = marks.get(Integer.parseInt(commitish.substring(1)));
       checkState(oid != null, "Unknown mark: %s", commitish);
@@ -221,12 +220,11 @@ class MarkRegistry {
 
   /**
    * Reads the optional {@code from} line following a {@code reset <ref>} line and, if present,
-   * updates (or deletes, for the null SHA-1) the given ref accordingly. Returns the next
-   * unconsumed line, since the {@code from} line is optional and whatever follows it (or the
-   * {@code reset} line itself) belongs to the next top-level command.
+   * updates (or deletes, for the null SHA-1) the given ref accordingly. Returns the next unconsumed
+   * line, since the {@code from} line is optional and whatever follows it (or the {@code reset}
+   * line itself) belongs to the next top-level command.
    */
-  String readReset(InputStream stream, Repository repository, String ref)
-      throws IOException {
+  String readReset(InputStream stream, Repository repository, String ref) throws IOException {
     String line = readLine(stream);
     if (line != null && line.startsWith("from ")) {
       final ObjectId target = resolveCommitish(repository, line.substring("from ".length()));
@@ -243,8 +241,8 @@ class MarkRegistry {
     return line;
   }
 
-  void readCommit(InputStream stream, ObjectInserter inserter,
-      Repository repository, String ref) throws IOException {
+  void readCommit(InputStream stream, ObjectInserter inserter, Repository repository, String ref)
+      throws IOException {
     final int mark = readMark(stream);
     final PersonIdent author = readIdent(stream, "author");
     final PersonIdent committer = readIdent(stream, "committer");
@@ -253,11 +251,13 @@ class MarkRegistry {
       line = readLine(stream);
     }
     final int msgLength = parseDataLength(line);
-    final String message =
-        new String(readExactlyBytes(stream, msgLength), StandardCharsets.UTF_8);
+    final String message = new String(readExactlyBytes(stream, msgLength), StandardCharsets.UTF_8);
 
     line = readLine(stream);
-    /* Official format doc (https://git-scm.com/docs/git-fast-import#_data): trailing LF after <raw> is optional and not counted in the byte count; skip any such blank lines. */
+    /*
+     * Official format doc (https://git-scm.com/docs/git-fast-import#_data): trailing LF after <raw>
+     * is optional and not counted in the byte count; skip any such blank lines.
+     */
     while ("".equals(line)) {
       line = readLine(stream);
     }
@@ -284,11 +284,9 @@ class MarkRegistry {
       if (line.startsWith("M ")) {
         final String[] parts = line.split(" ", 4);
         final FileMode mode = parseMode(parts[1]);
-        checkState(!"inline".equals(parts[2]), "Inline filemodify data is not supported: %s",
-            line);
+        checkState(!"inline".equals(parts[2]), "Inline filemodify data is not supported: %s", line);
         final ObjectId oid = parts[2].startsWith(":")
-            ? marks.get(Integer.parseInt(parts[2].substring(1)))
-            : ObjectId.fromString(parts[2]);
+            ? marks.get(Integer.parseInt(parts[2].substring(1))) : ObjectId.fromString(parts[2]);
         files.put(parsePath(parts[3]), new MEntry(mode, oid));
       } else if (line.startsWith("D ")) {
         files.remove(parsePath(line.substring("D ".length())));
@@ -319,8 +317,8 @@ class MarkRegistry {
     FastImporter.setRef(repository, ref, commitId);
   }
 
-  void readTag(InputStream stream, ObjectInserter inserter,
-      Repository repository, String tagName) throws IOException {
+  void readTag(InputStream stream, ObjectInserter inserter, Repository repository, String tagName)
+      throws IOException {
     String line = readLine(stream);
     Integer markNum = null;
     if (line != null && line.startsWith("mark :")) {
@@ -338,8 +336,7 @@ class MarkRegistry {
     }
 
     final int msgLength = parseDataLength(line);
-    final String message =
-        new String(readExactlyBytes(stream, msgLength), StandardCharsets.UTF_8);
+    final String message = new String(readExactlyBytes(stream, msgLength), StandardCharsets.UTF_8);
 
     final TagBuilder tagBuilder = new TagBuilder();
     tagBuilder.setTag(tagName);

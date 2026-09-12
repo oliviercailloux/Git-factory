@@ -84,12 +84,10 @@ public class FactoGitNewTests {
       Files.writeString(a.resolve("f.txt"), "a");
       Files.createDirectories(b);
       Files.writeString(b.resolve("f.txt"), "b");
-      ImmutableGraph<Path> graph =
-          GraphBuilder.directed().<Path>immutable().putEdge(a, b).build();
+      ImmutableGraph<Path> graph = GraphBuilder.directed().<Path>immutable().putEdge(a, b).build();
       IdStamp stampA =
           new IdStamp("Alice", "alice@example.com", Instant.EPOCH.atZone(ZoneOffset.UTC));
-      IdStamp stampB =
-          new IdStamp("Bob", "bob@example.com", Instant.EPOCH.atZone(ZoneOffset.UTC));
+      IdStamp stampB = new IdStamp("Bob", "bob@example.com", Instant.EPOCH.atZone(ZoneOffset.UTC));
       // BFS visits a (root) first, so stampA → a, stampB → b
       try (DfsRepository repo =
           FactoGitNew.ofDag(graph).withCommitters(ImmutableList.of(stampA, stampB)).repo()) {
@@ -112,8 +110,7 @@ public class FactoGitNewTests {
       Files.writeString(a.resolve("f.txt"), "a");
       Files.createDirectories(b);
       Files.writeString(b.resolve("f.txt"), "b");
-      ImmutableGraph<Path> graph =
-          GraphBuilder.directed().<Path>immutable().putEdge(a, b).build();
+      ImmutableGraph<Path> graph = GraphBuilder.directed().<Path>immutable().putEdge(a, b).build();
       // BFS visits a first → "first", b second → "second"
       try (DfsRepository repo =
           FactoGitNew.ofDag(graph).withMessages(ImmutableList.of("first", "second")).repo()) {
@@ -136,10 +133,8 @@ public class FactoGitNewTests {
       Files.writeString(a.resolve("f.txt"), "a");
       Files.createDirectories(b);
       Files.writeString(b.resolve("f.txt"), "b");
-      ImmutableGraph<Path> graph =
-          GraphBuilder.directed().<Path>immutable().putEdge(a, b).build();
-      FactoGitNew fgn =
-          FactoGitNew.ofDag(graph).withMessages(ImmutableList.of("msg1", "msg2"));
+      ImmutableGraph<Path> graph = GraphBuilder.directed().<Path>immutable().putEdge(a, b).build();
+      FactoGitNew fgn = FactoGitNew.ofDag(graph).withMessages(ImmutableList.of("msg1", "msg2"));
       ImmutableList<RevCommit> commits1, commits2;
       try (DfsRepository repo = fgn.repo(); Git git = Git.wrap(repo)) {
         commits1 = ImmutableList.copyOf(git.log().call());
@@ -163,12 +158,10 @@ public class FactoGitNewTests {
       Files.writeString(a.resolve("f.txt"), "a");
       Files.createDirectories(b);
       Files.writeString(b.resolve("f.txt"), "b");
-      ImmutableGraph<Path> graph =
-          GraphBuilder.directed().<Path>immutable().putEdge(a, b).build();
+      ImmutableGraph<Path> graph = GraphBuilder.directed().<Path>immutable().putEdge(a, b).build();
       IdStamp stampA =
           new IdStamp("Alice", "alice@example.com", Instant.EPOCH.atZone(ZoneOffset.UTC));
-      IdStamp stampB =
-          new IdStamp("Bob", "bob@example.com", Instant.EPOCH.atZone(ZoneOffset.UTC));
+      IdStamp stampB = new IdStamp("Bob", "bob@example.com", Instant.EPOCH.atZone(ZoneOffset.UTC));
       try (DfsRepository repo =
           FactoGitNew.ofDag(graph).withCommitters(p -> p.equals(a) ? stampA : stampB).repo()) {
         try (RevWalk rw = new RevWalk(repo)) {
@@ -206,8 +199,7 @@ public class FactoGitNewTests {
       Files.createDirectories(b);
       Files.writeString(b.resolve("f.txt"), "b");
       // BFS from root a: a → "Commit number 1", b → "Commit number 2"
-      ImmutableGraph<Path> graph =
-          GraphBuilder.directed().<Path>immutable().putEdge(a, b).build();
+      ImmutableGraph<Path> graph = GraphBuilder.directed().<Path>immutable().putEdge(a, b).build();
       try (DfsRepository repo = FactoGitNew.ofDag(graph).repo()) {
         try (RevWalk rw = new RevWalk(repo)) {
           RevCommit bCommit = rw.parseCommit(repo.resolve("refs/heads/main"));
@@ -220,19 +212,18 @@ public class FactoGitNewTests {
   }
 
   /**
-   * DAG structure:
-   * <pre>
+   * DAG structure: <pre>
    *   root1 ─── A ───┐
    *     │             ├── D ── E
    *     └─── B ──────┤
    *                   │
    *   root2 ─── C ───┘
-   * </pre>
-   * BFS order (and thus commit-message assignment): root1, root2, A, B, C, D, E.
+   * </pre> BFS order (and thus commit-message assignment): root1, root2, A, B, C, D, E.
    *
-   * <p>Exercises: two roots; one root forking into two branches; modified, deleted, added, and
-   * moved files; an empty file; a subdirectory; deep nesting; two commits with entirely empty
-   * trees (B and E); a three-parent merge commit (D); a symlink (in D).
+   * <p>
+   * Exercises: two roots; one root forking into two branches; modified, deleted, added, and moved
+   * files; an empty file; a subdirectory; deep nesting; two commits with entirely empty trees (B
+   * and E); a three-parent merge commit (D); a symlink (in D).
    */
   @Test
   void testComplexDag() throws Exception {
@@ -289,15 +280,9 @@ public class FactoGitNewTests {
       Files.createDirectories(e);
 
       // BFS order: root1, root2, A, B, C, D, E (7 commits).
-      ImmutableGraph<Path> graph = GraphBuilder.directed().<Path>immutable()
-          .putEdge(root1, a)
-          .putEdge(root1, b)
-          .putEdge(root2, c)
-          .putEdge(a, d)
-          .putEdge(b, d)
-          .putEdge(c, d)
-          .putEdge(d, e)
-          .build();
+      ImmutableGraph<Path> graph =
+          GraphBuilder.directed().<Path>immutable().putEdge(root1, a).putEdge(root1, b)
+              .putEdge(root2, c).putEdge(a, d).putEdge(b, d).putEdge(c, d).putEdge(d, e).build();
 
       FactoGitNew fgn = FactoGitNew.ofDag(graph)
           .withMessages(ImmutableList.of("root1", "root2", "A", "B", "C", "D", "E"));
@@ -371,8 +356,7 @@ public class FactoGitNewTests {
 
         // D: three parents (A, B, C in edge-insertion order); four entries including a symlink.
         assertEquals(3, cD.getParentCount());
-        assertEquals(
-            Set.of(cA.name(), cB.name(), cC.name()),
+        assertEquals(Set.of(cA.name(), cB.name(), cC.name()),
             Set.of(cD.getParent(0).name(), cD.getParent(1).name(), cD.getParent(2).name()));
         Map<String, String> dContents = treeContents(repo, cD);
         assertEquals(4, dContents.size());
@@ -394,14 +378,15 @@ public class FactoGitNewTests {
   }
 
   /**
-   * Git requires tree entries to be sorted by its own rule: directories sort as if their name had
-   * a trailing {@code /} appended. This differs from plain alphabetical order when a directory
-   * name is a prefix of a file name: {@code '.'} (0x2E) {@literal <} {@code '/'} (0x2F), so
+   * Git requires tree entries to be sorted by its own rule: directories sort as if their name had a
+   * trailing {@code /} appended. This differs from plain alphabetical order when a directory name
+   * is a prefix of a file name: {@code '.'} (0x2E) {@literal <} {@code '/'} (0x2F), so
    * {@code "a.txt"} must come before directory {@code "a/"} in git order, but alphabetical order
    * puts {@code "a"} before {@code "a.txt"}.
    *
-   * <p>This test will fail until {@code insertTree} sorts entries by git's comparator before
-   * appending them to the {@link org.eclipse.jgit.lib.TreeFormatter}.
+   * <p>
+   * This test will fail until {@code insertTree} sorts entries by git's comparator before appending
+   * them to the {@link org.eclipse.jgit.lib.TreeFormatter}.
    */
   @Test
   void testTreeEntryOrdering() throws Exception {

@@ -52,11 +52,13 @@ import org.slf4j.LoggerFactory;
 /**
  * Immutable builder for in-memory JGit repositories.
  *
- * <p>Use {@link #withRoot} and {@link #withChild} to construct the DAG incrementally. Each
+ * <p>
+ * Use {@link #withRoot} and {@link #withChild} to construct the DAG incrementally. Each
  * {@code with…} method returns a new instance; the receiver is never modified.
  *
- * <p>Call {@link #repo()} to build a fresh {@link DfsRepository}; it is safe to call
- * multiple times on the same instance.
+ * <p>
+ * Call {@link #repo()} to build a fresh {@link DfsRepository}; it is safe to call multiple times on
+ * the same instance.
  */
 public class FactoGitNew {
   private static final Logger LOGGER = LoggerFactory.getLogger(FactoGitNew.class);
@@ -76,8 +78,8 @@ public class FactoGitNew {
   }
 
   /**
-   * Returns an instance with an empty DAG and all defaults: epoch committer, auto-numbered messages,
-   * and a name of the form {@code "factogit created on <ISO timestamp>"}.
+   * Returns an instance with an empty DAG and all defaults: epoch committer, auto-numbered
+   * messages, and a name of the form {@code "factogit created on <ISO timestamp>"}.
    */
   public static FactoGitNew empty() {
     return new FactoGitNew(defaultName(), GraphBuilder.directed().<Path>immutable().build(),
@@ -91,7 +93,8 @@ public class FactoGitNew {
    */
   public static FactoGitNew ofDag(Graph<Path> dag) {
     checkArgument(!Graphs.hasCycle(dag));
-    return new FactoGitNew(defaultName(), ImmutableGraph.copyOf(dag), DEFAULT_COMMITTERS, DEFAULT_MESSAGES);
+    return new FactoGitNew(defaultName(), ImmutableGraph.copyOf(dag), DEFAULT_COMMITTERS,
+        DEFAULT_MESSAGES);
   }
 
   private static MutableGraph<Path> mutableCopy(Graph<Path> source) {
@@ -108,8 +111,9 @@ public class FactoGitNew {
 
   /**
    * Directories sort as if their name had a trailing {@code /} appended (byte value 0x2F), which
-   * places them after files whose names start with the same prefix followed by any byte {@literal <}
-   * 0x2F (e.g. {@code '.'} = 0x2E). This matches the order git expects inside a tree object.
+   * places them after files whose names start with the same prefix followed by any byte
+   * {@literal <} 0x2F (e.g. {@code '.'} = 0x2E). This matches the order git expects inside a tree
+   * object.
    */
   private static final Comparator<Path> GIT_TREE_ORDER = (p1, p2) -> {
     String n1 = p1.getFileName().toString();
@@ -197,8 +201,7 @@ public class FactoGitNew {
   private final OnDemandFunctionOfPath<String> commitMessages;
 
   private FactoGitNew(String name, ImmutableGraph<Path> dag,
-      OnDemandFunctionOfPath<IdStamp> committers,
-      OnDemandFunctionOfPath<String> commitMessages) {
+      OnDemandFunctionOfPath<IdStamp> committers, OnDemandFunctionOfPath<String> commitMessages) {
     this.name = checkNotNull(name);
     this.dag = checkNotNull(dag);
     this.committers = checkNotNull(committers);
@@ -248,8 +251,8 @@ public class FactoGitNew {
   }
 
   /**
-   * Returns an instance whose DAG additionally contains the edge {@code parent → child}.
-   * Both endpoints are added to the DAG if not already present.
+   * Returns an instance whose DAG additionally contains the edge {@code parent → child}. Both
+   * endpoints are added to the DAG if not already present.
    *
    * @throws IllegalArgumentException if adding the edge would create a cycle
    */
@@ -270,8 +273,9 @@ public class FactoGitNew {
   /**
    * Builds and returns a fresh repository created by {@code builder}. Safe to call multiple times.
    *
-   * <p>Commits are inserted in topological order. {@code refs/heads/main} and {@code HEAD} are
-   * set to the last node visited in breadth-first order from all roots.
+   * <p>
+   * Commits are inserted in topological order. {@code refs/heads/main} and {@code HEAD} are set to
+   * the last node visited in breadth-first order from all roots.
    */
   public <R extends Repository> R repo(BaseRepositoryBuilder<?, R> builder) throws IOException {
     TFunction<Path, IdStamp, IOException> ourCommitters = committers.summon(dag);
@@ -285,12 +289,11 @@ public class FactoGitNew {
 
     try (ObjectInserter inserter = repository.getObjectDatabase().newInserter()) {
       for (Path source : topoOrder) {
-        ImmutableList<ObjectId> parents = dag.predecessors(source).stream()
-            .map(commitsMap::get)
+        ImmutableList<ObjectId> parents = dag.predecessors(source).stream().map(commitsMap::get)
             .collect(ImmutableList.toImmutableList());
         PersonIdent ident = personIdent(ourCommitters.apply(source));
-        ObjectId oId = insertCommit(inserter, ident, ident,
-            insertTree(inserter, source), parents, ourMessages.apply(source));
+        ObjectId oId = insertCommit(inserter, ident, ident, insertTree(inserter, source), parents,
+            ourMessages.apply(source));
         commitsMap.put(source, oId);
         LOGGER.debug("Created commit for {}: {}.", source, oId);
       }
@@ -299,8 +302,7 @@ public class FactoGitNew {
     ImmutableBiMap<Path, ObjectId> commits = ImmutableBiMap.copyOf(commitsMap);
 
     if (!dag.nodes().isEmpty()) {
-      ImmutableSet<Path> roots = dag.nodes().stream()
-          .filter(n -> dag.inDegree(n) == 0)
+      ImmutableSet<Path> roots = dag.nodes().stream().filter(n -> dag.inDegree(n) == 0)
           .collect(ImmutableSet.toImmutableSet());
       Path bfsLast = null;
       for (Path node : Traverser.<Path>forGraph(dag::successors).breadthFirst(roots)) {

@@ -36,7 +36,9 @@ public class FastImporter<R extends Repository> {
     return using(() -> new InMemoryRepository(new DfsRepositoryDescription(name)));
   }
 
-  /** Returns an instance that builds into a fresh {@link FileRepository} rooted at {@code gitDir}. */
+  /**
+   * Returns an instance that builds into a fresh {@link FileRepository} rooted at {@code gitDir}.
+   */
   public static FastImporter<FileRepository> toFile(File gitDir) {
     return using(() -> (FileRepository) new FileRepositoryBuilder().setGitDir(gitDir).build());
   }
@@ -58,11 +60,14 @@ public class FastImporter<R extends Repository> {
     return Resources.asByteSource(Resources.getResource(FastImporter.class, resourceName));
   }
 
-  private static sealed interface TreeNode permits FileNode, DirNode {}
+  private static sealed interface TreeNode permits FileNode, DirNode {
+  }
 
-  private static record FileNode(MEntry entry) implements TreeNode {}
+  private static record FileNode (MEntry entry) implements TreeNode {
+  }
 
-  private static record DirNode(LinkedHashMap<String, TreeNode> children) implements TreeNode {}
+  private static record DirNode (LinkedHashMap<String, TreeNode> children) implements TreeNode {
+  }
 
   private static DirNode putEntry(DirNode dir, String path, MEntry entry) {
     final LinkedHashMap<String, TreeNode> newChildren = new LinkedHashMap<>(dir.children());
@@ -71,8 +76,7 @@ public class FastImporter<R extends Repository> {
       newChildren.put(path, new FileNode(entry));
     } else {
       final String dirName = path.substring(0, slash);
-      final DirNode subdir = newChildren.containsKey(dirName)
-          ? (DirNode) newChildren.get(dirName)
+      final DirNode subdir = newChildren.containsKey(dirName) ? (DirNode) newChildren.get(dirName)
           : new DirNode(new LinkedHashMap<>());
       newChildren.put(dirName, putEntry(subdir, path.substring(slash + 1), entry));
     }
@@ -86,9 +90,8 @@ public class FastImporter<R extends Repository> {
    * object.
    */
   private static final Comparator<Map.Entry<String, TreeNode>> GIT_TREE_ORDER =
-      Comparator.comparing(entry -> entry.getValue() instanceof DirNode
-          ? entry.getKey() + "/"
-          : entry.getKey());
+      Comparator.comparing(
+          entry -> entry.getValue() instanceof DirNode ? entry.getKey() + "/" : entry.getKey());
 
   private static ObjectId insertDirNode(ObjectInserter inserter, DirNode dir) throws IOException {
     final TreeFormatter formatter = new TreeFormatter();
@@ -132,8 +135,8 @@ public class FastImporter<R extends Repository> {
   }
 
   /**
-   * Parses {@code source} as a {@code git fast-export} stream into a new repository created by
-   * this instance's factory.
+   * Parses {@code source} as a {@code git fast-export} stream into a new repository created by this
+   * instance's factory.
    */
   public R importRepository(ByteSource source) throws IOException {
     R repository = factory.get();

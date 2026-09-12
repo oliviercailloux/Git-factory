@@ -62,7 +62,7 @@ public class GitCloner {
    * If the given uri contains an empty repository, this returns an empty repository:
    * repository.getObjectDatabase().exists() is true; repository.getRefDatabase().hasRefs() is
    * false.
-   *<p>
+   * <p>
    * TODO I should probably not attempt to create a bare repository where a non-bare repository
    * currently lives!
    *
