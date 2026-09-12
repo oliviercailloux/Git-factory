@@ -257,6 +257,10 @@ class MarkRegistry {
         new String(readExactlyBytes(stream, msgLength), StandardCharsets.UTF_8);
 
     line = readLine(stream);
+    /* Official format doc (https://git-scm.com/docs/git-fast-import#_data): trailing LF after <raw> is optional and not counted in the byte count; skip any such blank lines. */
+    while ("".equals(line)) {
+      line = readLine(stream);
+    }
     final List<ObjectId> parents = new ArrayList<>();
     ObjectId firstParent = null;
     if (line != null && line.startsWith("from ")) {
