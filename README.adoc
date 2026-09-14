@@ -2,6 +2,26 @@
 
 Utilities for creating in-memory JGit repositories programmatically, primarily for use in tests.
 
+== TODO
+FGN: default instance uses toDfs with empty name. Methods permit to change the builder: using supplier, using builder, toDfs, toFile. These implement an interface (RepositoryCreator?) and some helper takes care of providing the supplier.
+OR the caller provides a RepositorySupplier, which wraps the builder. But this hardens use.
+For: FGN, FI, Cloner (if cloner is redesigned)
+
+Cloner:
+no work tree -> any repo (dfs or file). We clone, or if the repo exists, we fetch.
+  doing this requires more than a supplier of repo as the repo may exist? Or we can check afterwards if it exists, but this changes the contract!
+with work tree -> only file repo. We clone, or if the repo exists, we need to fail fast if WD has foreign files or local refs that do not exist remotely and such things.
+One possible approach: pure cloner, with the usual RepositoryCreator interface.
+  Updater, which takes an existing repository.
+  AutoUpdater: a supplier WHICH could exist? That’s messy again?
+One solution: the interface RepositoryCreator is rather RepositorySupplier, and usage site indicates if it wants fresh ones only.
+
+Cloner update from BaseRepoBuilder -> FileRepo -> exists!
+  If exists, we just want to update, but then no guarantee that the builder contract is satisfied.
+  We specify that if the object database exists, then we do not create it but rather attempt to fetch refs. But we also should update the work dir!
+
+Before this very fundamental change, publish a version?
+
 == Alternatives
 Eclipse jgit provides TestRepository that wraps an existing repository and permits to create commits on it.
 
