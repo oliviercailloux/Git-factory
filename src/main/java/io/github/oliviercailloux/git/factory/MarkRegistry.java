@@ -109,7 +109,8 @@ class MarkRegistry {
     checkState(
         mode == FileMode.REGULAR_FILE || mode == FileMode.EXECUTABLE_FILE
             || mode == FileMode.SYMLINK || mode == FileMode.GITLINK || mode == FileMode.TREE,
-        "Unsupported or invalid file mode (expected one of 100644, 100755, 120000, 160000, 040000): %s",
+        "Unsupported or invalid file mode (expected one of 100644, 100755, 120000, 160000,"
+            + " 040000): %s",
         bitsToken);
     return mode;
   }

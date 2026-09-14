@@ -135,7 +135,8 @@ public class FactoGitNewTests {
       Files.writeString(b.resolve("f.txt"), "b");
       ImmutableGraph<Path> graph = GraphBuilder.directed().<Path>immutable().putEdge(a, b).build();
       FactoGitNew fgn = FactoGitNew.ofDag(graph).withMessages(ImmutableList.of("msg1", "msg2"));
-      ImmutableList<RevCommit> commits1, commits2;
+      ImmutableList<RevCommit> commits1;
+      ImmutableList<RevCommit> commits2;
       try (DfsRepository repo = fgn.repo(); Git git = Git.wrap(repo)) {
         commits1 = ImmutableList.copyOf(git.log().call());
       }
@@ -295,10 +296,10 @@ public class FactoGitNewTests {
         RevCommit cRoot1 = commits.get("root1");
         RevCommit cRoot2 = commits.get("root2");
         RevCommit cA = commits.get("A");
-        RevCommit cB = commits.get("B");
-        RevCommit cC = commits.get("C");
-        RevCommit cD = commits.get("D");
-        RevCommit cE = commits.get("E");
+        final RevCommit cB = commits.get("B");
+        final RevCommit cC = commits.get("C");
+        final RevCommit cD = commits.get("D");
+        final RevCommit cE = commits.get("E");
         assertNotNull(cRoot1, "root1");
         assertNotNull(cRoot2, "root2");
         assertNotNull(cA, "A");
