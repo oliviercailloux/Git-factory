@@ -49,9 +49,9 @@ public class FastImporter<R extends Repository> {
    * The repository is created bare iff the builder is configured as bare.
    * <p>
    * Make sure the target directory set in the builder is empty (or non-existent) when calling
-   * {@link FastImporter#importRepository}, otherwise the resulting repository could be in an inconsistent
-   * state (the creation step does fail in some cases when the existing directory looks like an
-   * existing repository, but not in all cases).
+   * {@link FastImporter#importRepository}, otherwise the resulting repository could be in an
+   * inconsistent state (the creation step does fail in some cases when the existing directory looks
+   * like an existing repository, but not in all cases).
    *
    * @param builder a builder configured as desired, but not yet built. No need to call
    *        {@link BaseRepositoryBuilder#setup()} or {@link BaseRepositoryBuilder#build()}: the
